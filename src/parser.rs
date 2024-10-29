@@ -21,7 +21,7 @@ impl<'a> Parser<'a> {
         self.peek_token = self.lexer.get_next_token();
     }
 
-    pub fn parse_ast(&mut self) -> Result<ast::Program, String> {
+    pub fn parse_program(&mut self) -> Result<ast::Program, String> {
         self.next_token();
         self.next_token();
         let mut statements: Vec<Box<dyn ast::Statement>> = Vec::new();
@@ -29,7 +29,6 @@ impl<'a> Parser<'a> {
             if token.token_type == TOKENTYPE::LET {
                 statements.push(Box::new(self.parse_let_statement()?));
             }
-            self.next_token();
         }
         Ok(ast::Program {
             statements
@@ -137,5 +136,22 @@ impl<'a> Parser<'a> {
             op1: op1?,
             op2: op2?
         }))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn parse_let_statement() {
+        let let_statement = String::from("let var_x = 20; let var_y = 30;");
+        let mut parser = Parser::new(&let_statement);
+        let program = parser.parse_program();
+        assert_eq!(program.is_ok(), true);
+        let program: ast::Program = program.unwrap();
+        println!("{:?}", program);
+        assert_eq!(program.statements.len(), 2);
+        assert_eq!(program.statements[0].token_literal(), "let");
+        assert_eq!(program.statements[1].token_literal(), "let");
     }
 }

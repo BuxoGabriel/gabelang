@@ -6,7 +6,7 @@ pub fn start() {
     io::stdout().flush().unwrap();
     let stdin = io::stdin();
     for line in stdin.lock().lines() {
-        let program_ast = Parser::new(&line.unwrap()).parse_ast();
+        let program_ast = Parser::new(&line.unwrap()).parse_program();
         match program_ast {
             Ok(program) => {
                 for line in program.statements.iter() {
