@@ -1,0 +1,9 @@
+fn add_one(i) {
+    i + 1
+}
+
+let i = 10;
+
+i = add_one(i)
+
+i

@@ -1,8 +1,9 @@
 use std::{ process, env };
-use gabelang::Config;
+use gabelang::{ Config, repl };
 
 fn main() {
     let args: Vec<String> = env::args().collect();
+    repl::start();
     let config = Config::build(&args).unwrap_or_else(|err| {
         println!("Problem parsing arguments: {err}");
         process::exit(1);

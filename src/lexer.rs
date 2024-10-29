@@ -4,16 +4,27 @@ use std::str::Chars;
 #[derive(Debug, PartialEq, Eq)]
 pub enum TOKENTYPE {
     EQUAL,
+    BANG,
+    EQ,
+    NOTEQ,
     PLUS,
     MINUS,
+    ASTERISK,
+    SLASH,
+    LT,
+    GT,
     COMMA,
     SEMICOLON,
     LPAREN,
     RPAREN,
-    LBRACKET,
-    RBRACKET,
+    LSQUIG,
+    RSQUIG,
     LET,
     FN,
+    IF,
+    ELSE,
+    TRUE,
+    FALSE,
     NUMBER,
     IDENTIFIER,
     ILLEGAL
@@ -21,8 +32,8 @@ pub enum TOKENTYPE {
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct Token {
-    token_type: TOKENTYPE,
-    literal: String
+    pub token_type: TOKENTYPE,
+    pub literal: String
 }
 
 impl Token {
@@ -32,14 +43,12 @@ impl Token {
 }
 
 pub struct Lexer<'a> {
-    input: &'a str,
     peekable_iter: Peekable<Chars<'a>>,
 }
 
 impl<'a> Lexer<'a> {
     pub fn new(contents: &'a str) -> Lexer<'a> {
         Self {
-            input: contents,
             peekable_iter: contents.chars().peekable()
         }
     }
@@ -51,43 +60,68 @@ impl<'a> Lexer<'a> {
         tokens
     }
     
-    fn get_next_token(&mut self) -> Option<Token> {
+    pub fn get_next_token(&mut self) -> Option<Token> {
+        // Whitespace is not part of the language so skip it but it can delimit tokens
         self.skip_whitespace();
         let token_type: TOKENTYPE;
         let literal: String;
-        if let Some(c) = self.get_next_char() {
-            // There is a next char
-            if is_alpha(c) {
-                literal = self.read_identifier(c);
-                if let Some(tt) = literal_is_keyword(&literal) {
-                    token_type = tt;
-                } else {
-                    token_type = TOKENTYPE::IDENTIFIER;
-                }
-            }
-            else if c.is_numeric() {
-                literal = self.read_number(c);
-                token_type = TOKENTYPE::NUMBER;
-            } else {
-                literal = String::from(c);
-                token_type = match c {
-                    '=' => TOKENTYPE::EQUAL,
-                    '+' => TOKENTYPE::PLUS,
-                    '-' => TOKENTYPE::MINUS,
-                    ',' => TOKENTYPE::COMMA,
-                    ';' => TOKENTYPE::SEMICOLON,
-                    '(' => TOKENTYPE::LPAREN,
-                    ')' => TOKENTYPE::RPAREN,
-                    '{' => TOKENTYPE::LBRACKET,
-                    '}' => TOKENTYPE::RBRACKET,
-                    _ => TOKENTYPE::ILLEGAL
-                };
-            }
-            Some(Token::new(token_type, literal))
-        } else {
-            // There are no chars left
-            None
+        let next_char = self.get_next_char();
+        // If no chars are left return None for EOF
+        if next_char.is_none() {
+            return None
         }
+        let c = next_char.unwrap();
+        // There is a next char
+        if Lexer::is_alpha(c) {
+            literal = self.read_identifier(c);
+            token_type = Lexer::literal_keyword(&literal);
+        }
+        else if c.is_numeric() {
+            literal = self.read_number(c);
+            token_type = TOKENTYPE::NUMBER;
+        } else {
+            literal = String::from(c);
+            token_type = match c {
+                '=' => {
+                    if let Some(next_char) = self.peek_next_char() {
+                        if *next_char == '=' {
+                            self.get_next_char();
+                            TOKENTYPE::EQ
+                        } else {
+                            TOKENTYPE::EQUAL
+                        }
+                    } else {
+                        TOKENTYPE::EQUAL
+                    }
+                }
+                '!' => {
+                    if let Some(next_char) = self.peek_next_char() {
+                        if *next_char == '=' {
+                            self.get_next_char();
+                            TOKENTYPE::NOTEQ
+                        } else {
+                            TOKENTYPE::BANG
+                        }
+                    } else {
+                        TOKENTYPE::BANG
+                    }
+                }
+                '+' => TOKENTYPE::PLUS,
+                '-' => TOKENTYPE::MINUS,
+                '*' => TOKENTYPE::ASTERISK,
+                '/' => TOKENTYPE::SLASH,
+                '<' => TOKENTYPE::LT,
+                '>' => TOKENTYPE::GT,
+                ',' => TOKENTYPE::COMMA,
+                ';' => TOKENTYPE::SEMICOLON,
+                '(' => TOKENTYPE::LPAREN,
+                ')' => TOKENTYPE::RPAREN,
+                '{' => TOKENTYPE::LSQUIG,
+                '}' => TOKENTYPE::RSQUIG,
+                _ => TOKENTYPE::ILLEGAL
+            };
+        }
+        Some(Token::new(token_type, literal))
     }
 
     fn get_next_char(&mut self) -> Option<char> {
@@ -102,7 +136,7 @@ impl<'a> Lexer<'a> {
         let mut identifier = String::new();
         identifier.push(first_char);
         while let Some(char) = self.peek_next_char() {
-            if is_alpha(*char) {
+            if Lexer::is_alpha(*char) {
                 identifier.push(self.get_next_char().unwrap());
             } else {
                 break;
@@ -133,21 +167,24 @@ impl<'a> Lexer<'a> {
             }
         }
     }
-}
 
-fn is_alpha(c: char) -> bool {
-    ('a' <= c && c <= 'z') ||
-    ('A' <= c && c <= 'Z') ||
-    c == '_'
-}
+    fn is_alpha(c: char) -> bool {
+        c.is_alphabetic() || c == '_'
+    }
 
-fn literal_is_keyword(literal: &String) -> Option<TOKENTYPE> {
-    match literal.as_str() {
-        "let" => Some(TOKENTYPE::LET),
-        "fn" => Some(TOKENTYPE::FN),
-        _ => None
+    fn literal_keyword(literal: &String) -> TOKENTYPE {
+        match literal.as_str() {
+            "let" => TOKENTYPE::LET,
+            "fn" => TOKENTYPE::FN,
+            "if" => TOKENTYPE::IF,
+            "else" => TOKENTYPE::ELSE,
+            "True" => TOKENTYPE::TRUE,
+            "False" => TOKENTYPE::FALSE,
+        _ => TOKENTYPE::IDENTIFIER
+        }
     }
 }
+
 
 #[cfg(test)]
 mod tests {
@@ -234,7 +271,7 @@ mod tests {
             Token::new(TOKENTYPE::LPAREN, String::from('(')),
             Token::new(TOKENTYPE::IDENTIFIER, String::from("foo")),
             Token::new(TOKENTYPE::RPAREN, String::from(')')),
-            Token::new(TOKENTYPE::LBRACKET, String::from('{')),
+            Token::new(TOKENTYPE::LSQUIG, String::from('{')),
             Token::new(TOKENTYPE::LET, String::from("let")),
             Token::new(TOKENTYPE::IDENTIFIER, String::from("number")),
             Token::new(TOKENTYPE::EQUAL, String::from('=')),
@@ -243,7 +280,7 @@ mod tests {
             Token::new(TOKENTYPE::NUMBER, String::from("1")),
             Token::new(TOKENTYPE::SEMICOLON, String::from(';')),
             Token::new(TOKENTYPE::IDENTIFIER, String::from("number")),
-            Token::new(TOKENTYPE::RBRACKET, String::from('}')),
+            Token::new(TOKENTYPE::RSQUIG, String::from('}')),
         ];
         let mut lexer = Lexer::new(&input);
         let tokens = lexer.parse();
