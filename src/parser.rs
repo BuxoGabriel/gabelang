@@ -43,27 +43,30 @@ impl<'a> Parser<'a> {
         assert_eq!(self.current_token.is_none(), false);
         let let_token: Token = self.current_token.take().unwrap();
         assert_eq!(let_token.token_type, TOKENTYPE::LET);
+        // Advance to identifier
+        self.next_token();
         // If no token after let keyword or token after let keyword is not an identifier it is an invalid let statement
-        if self.peek_token.is_none() {
+        if self.current_token.is_none() {
             return Err(String::from("Let statement must have an identifier after keywork let"));
         }
-        if self.peek_token.as_ref().unwrap().token_type != TOKENTYPE::IDENTIFIER {
+        if self.current_token.as_ref().unwrap().token_type != TOKENTYPE::IDENTIFIER {
             return Err(String::from("Let statement must have an identifier after keyword let"));
         }
-        self.next_token();
         let identifier_token = self.current_token.take().unwrap();
         let identifier = ast::Identifier {
             name: identifier_token.literal.clone(),
             token: identifier_token
         };
-        // If no token after identifier or token after identifier is not an equal sign it is an invalid let statement
-        if self.peek_token.is_none() {
-            return Err(String::from("Let statement must have a \"=\" after variable name"));
-        }
-        if self.peek_token.as_ref().unwrap().token_type != TOKENTYPE::EQUAL {
-            return Err(String::from("Let statement must have a \"=\" after variable name"));
-        }
+        // Advance to = sign
         self.next_token();
+        // If no token after identifier or token after identifier is not an equal sign it is an invalid let statement
+        if self.current_token.is_none() {
+            return Err(String::from("Let statement must have a \"=\" after variable name"));
+        }
+        if self.current_token.as_ref().unwrap().token_type != TOKENTYPE::EQUAL {
+            return Err(String::from("Let statement must have a \"=\" after variable name"));
+        }
+        // Advance to expression
         self.next_token();
         let expression = self.parse_expression()?;
         Ok(ast::LetStatement {
@@ -82,7 +85,7 @@ impl<'a> Parser<'a> {
             TOKENTYPE::NUMBER => {
                 let peek_token = self.peek_token.as_ref();
                 if peek_token.is_none() {
-                    return Err(String::from("Invalid rhs of let statement, did you forget a semicolon?"));
+                    return Err(String::from("Invalid expression, did you forget a semicolon?"));
                 }
                 match peek_token.unwrap().token_type {
                     TOKENTYPE::PLUS |
@@ -98,11 +101,17 @@ impl<'a> Parser<'a> {
     }
 
     // Precondition: Caller must check that current_token is a number
+    // Additionally, the parsed number should never be the last token of the program
     fn parse_number(&mut self) -> Result<Box<ast::Number>, String> {
         // Assert that the current token is a number
         assert_eq!(self.current_token.is_none(), false);
         let number_token = self.current_token.take().unwrap();
         assert_eq!(number_token.token_type, TOKENTYPE::NUMBER);
+        // Advance parser to next token
+        self.next_token();
+        if self.current_token.as_ref().unwrap().token_type == TOKENTYPE::SEMICOLON {
+            self.next_token();
+        }
         // Create and return number Expression
         let value = match number_token.literal.parse() {
             Ok(num) => num,
@@ -116,7 +125,17 @@ impl<'a> Parser<'a> {
         }))
     }
 
+    // Precondition: Caller must check that current token is a number
+    // Additionally, the number must be followed by a valid operator to call this function
     fn parse_operation(&mut self) -> Result<Box<dyn ast::Expression>, String> {
-        todo!();
+        let op1 = self.parse_number();
+        let operand_token = self.current_token.take().unwrap();
+        self.next_token();
+        let op2 = self.parse_expression();
+        Ok(Box::from(ast::ArithmaticExpression {
+            token: operand_token,
+            op1: op1?,
+            op2: op2?
+        }))
     }
 }

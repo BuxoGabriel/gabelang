@@ -65,6 +65,26 @@ impl Expression for Number {
 }
 
 #[derive(Debug)]
+pub struct ArithmaticExpression {
+    pub token: Token,
+    pub op1: Box<dyn Expression>,
+    pub op2: Box<dyn Expression>
+}
+
+impl Node for ArithmaticExpression {
+    fn token_literal(&self) -> &str {
+        &self.token.literal
+    }
+}
+
+impl Expression for ArithmaticExpression {
+    fn expression_node(&self) -> Box<dyn Node> {
+        todo!()
+    }
+}
+
+
+#[derive(Debug)]
 pub struct LetStatement {
     pub token: Token,
     pub identifier: Identifier,
