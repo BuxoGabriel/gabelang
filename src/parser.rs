@@ -80,7 +80,18 @@ impl<'a> Parser<'a> {
         }
         match self.current_token.as_ref().unwrap().token_type {
             TOKENTYPE::NUMBER => {
-                Ok(self.parse_number()?)
+                let peek_token = self.peek_token.as_ref();
+                if peek_token.is_none() {
+                    return Err(String::from("Invalid rhs of let statement, did you forget a semicolon?"));
+                }
+                match peek_token.unwrap().token_type {
+                    TOKENTYPE::PLUS |
+                    TOKENTYPE::MINUS |
+                    TOKENTYPE::ASTERISK |
+                    TOKENTYPE::SLASH => Ok(self.parse_operation()?),
+                    TOKENTYPE::SEMICOLON => Ok(self.parse_number()?),
+                    _ => Err(String::from("Invalid expression value"))
+                }
             }
             _ => Err(String::from("Invalid expression value"))
         }
@@ -103,5 +114,9 @@ impl<'a> Parser<'a> {
             token: number_token,
             value
         }))
+    }
+
+    fn parse_operation(&mut self) -> Result<Box<dyn ast::Expression>, String> {
+        todo!();
     }
 }
