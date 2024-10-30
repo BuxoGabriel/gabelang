@@ -25,20 +25,55 @@ impl<'a> Parser<'a> {
         self.next_token();
         self.next_token();
         let mut statements: Vec<Box<dyn ast::Statement>> = Vec::new();
-        while let Some(token) = self.current_token.as_ref() {
-            if token.token_type == TOKENTYPE::LET {
-                statements.push(Box::new(self.parse_let_statement()?));
-            }
+        while self.current_token.as_ref().is_some() {
+            statements.push(self.parse_statement()?);
         }
         Ok(ast::Program {
             statements
         })
     }
 
-    // Prerequisite: caller must check that current token is a let token
-    fn parse_let_statement(&mut self) -> Result<ast::LetStatement, String> {
+    // Precondition: Caller must only call this if the current token is an open squig
+    fn parse_block(&mut self) -> Result<ast::CodeBlock, String> {
+        // Assert that the current token is an if token
+        // Todo: compiler macro to remove asserts when building for production
+        assert_eq!(self.current_token.is_none(), false);
+        let open_token: Token = self.current_token.take().unwrap();
+        assert_eq!(open_token.token_type, TOKENTYPE::LSQUIG);
+        // Advance to statements
+        self.next_token();
+        let mut statements = Vec::new();
+        while self.current_token.is_some() {
+            if self.current_token.as_ref().unwrap().token_type == TOKENTYPE::RSQUIG {
+                // If you reach the close token then the block is done being read
+                let close_token: Token = self.current_token.take().unwrap();
+                self.next_token();
+                let code_block = ast::CodeBlock {
+                    open_token,
+                    close_token,
+                    statements
+                };
+                return Ok(code_block);
+            } else {
+                statements.push(self.parse_statement()?);
+            }
+        }
+        Err(String::from("Code block was not closed, did you forget a \"}\""))
+    }
+
+
+    fn parse_statement(&mut self) -> Result<Box<dyn ast::Statement>, String> {
+        match self.current_token.as_ref().unwrap().token_type {
+            TOKENTYPE::LET => Ok(self.parse_let_statement()?),
+            TOKENTYPE::IF => Ok(self.parse_if_statement()?),
+            _ => Err(String::from("Invalid statement"))
+        }
+    }
+
+    // Precondition: caller must check that current token is a let token
+    fn parse_let_statement(&mut self) -> Result<Box<ast::LetStatement>, String> {
         // Assert that the current token is a let token
-        // Todo: compiler marcro to remove asserts when building for production
+        // Todo: compiler macro to remove asserts when building for production
         assert_eq!(self.current_token.is_none(), false);
         let let_token: Token = self.current_token.take().unwrap();
         assert_eq!(let_token.token_type, TOKENTYPE::LET);
@@ -68,12 +103,31 @@ impl<'a> Parser<'a> {
         // Advance to expression
         self.next_token();
         let expression = self.parse_expression()?;
-        Ok(ast::LetStatement {
+        Ok(Box::from(ast::LetStatement {
             identifier,
             token: let_token,
             expression
-        })
+        }))
     }
+
+    // Precondition: Caller must only call this if the current token is an if token
+    fn parse_if_statement(&mut self) -> Result<Box<ast::IfStatement>, String> {
+        // Assert that the current token is an if token
+        // Todo: compiler macro to remove asserts when building for production
+        assert_eq!(self.current_token.is_none(), false);
+        let if_token: Token = self.current_token.take().unwrap();
+        assert_eq!(if_token.token_type, TOKENTYPE::IF);
+        // Advance to expression to validate
+        self.next_token();
+        let condition = self.parse_expression()?;
+        let then = self.parse_block()?;
+        Ok(Box::from(ast::IfStatement {
+            token: if_token,
+            condition,
+            then
+        }))
+    }
+
 
     fn parse_expression(&mut self) -> Result<Box<dyn ast::Expression>, String> {
         // invalid expression if it is blank
@@ -90,11 +144,14 @@ impl<'a> Parser<'a> {
                     TOKENTYPE::PLUS |
                     TOKENTYPE::MINUS |
                     TOKENTYPE::ASTERISK |
-                    TOKENTYPE::SLASH => Ok(self.parse_operation()?),
-                    TOKENTYPE::SEMICOLON => Ok(self.parse_number()?),
+                    TOKENTYPE::SLASH => Ok(self.parse_operation(None)?),
+                    TOKENTYPE::SEMICOLON |
+                    TOKENTYPE::RPAREN |
+                    TOKENTYPE:: LSQUIG => Ok(self.parse_number()?),
                     _ => Err(String::from("Invalid expression value"))
                 }
-            }
+            },
+            TOKENTYPE::LPAREN => Ok(self.parse_group_expression()?),
             _ => Err(String::from("Invalid expression value"))
         }
     }
@@ -108,7 +165,7 @@ impl<'a> Parser<'a> {
         assert_eq!(number_token.token_type, TOKENTYPE::NUMBER);
         // Advance parser to next token
         self.next_token();
-        if self.current_token.as_ref().unwrap().token_type == TOKENTYPE::SEMICOLON {
+        if self.current_token.is_some() && self.current_token.as_ref().unwrap().token_type == TOKENTYPE::SEMICOLON {
             self.next_token();
         }
         // Create and return number Expression
@@ -124,18 +181,69 @@ impl<'a> Parser<'a> {
         }))
     }
 
-    // Precondition: Caller must check that current token is a number
-    // Additionally, the number must be followed by a valid operator to call this function
-    fn parse_operation(&mut self) -> Result<Box<dyn ast::Expression>, String> {
-        let op1 = self.parse_number();
+    // Precondition: If starting on a number, must pass None as an argument
+    // Otherwise, pass in Ok(op1) and will expect to start on operand
+    fn parse_operation(&mut self, first_operand:Option<Box<dyn ast::Expression>>) -> Result<Box<ast::ArithmaticExpression>, String> {
+        let op1 = match first_operand {
+            Some(op1) => op1,
+            None => self.parse_number()?
+        };
         let operand_token = self.current_token.take().unwrap();
         self.next_token();
-        let op2 = self.parse_expression();
+        let op2 = self.parse_expression()?;
         Ok(Box::from(ast::ArithmaticExpression {
             token: operand_token,
-            op1: op1?,
-            op2: op2?
+            op1,
+            op2
         }))
+    }
+
+    // Precondition: Caller must only call this if the current token is an open parenthesis
+    fn parse_group_expression(&mut self) -> Result<Box<dyn ast::Expression>, String> {
+        // Assert that this method was called while the current token is on open parenthesis
+        assert_eq!(self.current_token.is_some(), true);
+        let open_token = self.current_token.take().unwrap();
+        assert_eq!(open_token.token_type, TOKENTYPE::LPAREN);
+        // Advance parser to interior expression
+        self.next_token();
+        let expression = self.parse_expression()?;
+        // Check that the opened group is closed
+        if self.current_token.is_none() {
+            return Err(String::from("Group expression was not closed, did you forget a \")\""));
+        }
+        let close_token = self.current_token.take().unwrap();
+        if close_token.token_type != TOKENTYPE::RPAREN {
+            return Err(String::from("Group expression was not closed, did you forget a \")\""));
+        }
+        // Contruct Group expression
+        let mut expression: Box<dyn ast::Expression> = Box::from(ast::GroupExpression{
+            open_token,
+            close_token,
+            expression
+        });
+
+        // Move past close expression
+        self.next_token();
+        if self.current_token.is_none() {
+            return Err(String::from("Group expression closing can not be last token, did you forget a \";\""));
+        }
+        let next_token_type = self.current_token.as_ref().unwrap().token_type.clone();
+        if next_token_type == TOKENTYPE::SEMICOLON {
+            self.next_token();
+        }
+
+        // If next token is arithmatic then pass in the group expression as the lhs
+        if Parser::token_type_is_arithmatic(next_token_type) {
+            expression = self.parse_operation(Some(expression))?;
+        }
+        Ok(expression)
+    }
+
+    fn token_type_is_arithmatic(token: TOKENTYPE) -> bool {
+        token == TOKENTYPE::PLUS ||
+        token == TOKENTYPE::MINUS ||
+        token == TOKENTYPE::ASTERISK ||
+        token == TOKENTYPE::SLASH
     }
 }
 
@@ -144,14 +252,15 @@ mod tests {
     use super::*;
     #[test]
     fn parse_let_statement() {
-        let let_statement = String::from("let var_x = 20; let var_y = 30;");
+        let let_statement = String::from("let var_x = 20; let var_y = 30; let var_z = 1;");
         let mut parser = Parser::new(&let_statement);
         let program = parser.parse_program();
         assert_eq!(program.is_ok(), true);
         let program: ast::Program = program.unwrap();
         println!("{:?}", program);
-        assert_eq!(program.statements.len(), 2);
+        assert_eq!(program.statements.len(), 3);
         assert_eq!(program.statements[0].token_literal(), "let");
         assert_eq!(program.statements[1].token_literal(), "let");
+        assert_eq!(program.statements[2].token_literal(), "let");
     }
 }

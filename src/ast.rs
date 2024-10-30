@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use crate::lexer::Token;
 
 pub trait Node {
-    fn token_literal(&self) -> &str;
+    fn token_literal(&self) -> String;
 }
 
 pub trait Statement : Node + Debug {
@@ -20,10 +20,10 @@ pub struct Program {
 }
 
 impl Program {
-    pub fn token_literal(&self) -> &str {
+    pub fn token_literal(&self) -> String {
         match &self.statements.get(0) {
             Some(statement) => statement.token_literal(),
-            None => ""
+            None => String::from("")
         }
     }
 }
@@ -35,8 +35,8 @@ pub struct Identifier {
 }
 
 impl Node for Identifier {
-    fn token_literal(&self) -> &str {
-        &self.token.literal
+    fn token_literal(&self) -> String {
+        self.token.literal.clone()
     }
 }
 
@@ -53,8 +53,8 @@ pub struct Number {
 }
 
 impl Node for Number {
-    fn token_literal(&self) -> &str {
-        &self.token.literal
+    fn token_literal(&self) -> String {
+        self.token.literal.clone()
     }
 }
 
@@ -72,8 +72,8 @@ pub struct ArithmaticExpression {
 }
 
 impl Node for ArithmaticExpression {
-    fn token_literal(&self) -> &str {
-        &self.token.literal
+    fn token_literal(&self) -> String {
+        self.token.literal.clone()
     }
 }
 
@@ -83,6 +83,26 @@ impl Expression for ArithmaticExpression {
     }
 }
 
+#[derive(Debug)]
+pub struct GroupExpression {
+    pub open_token: Token,
+    pub close_token: Token,
+    pub expression: Box<dyn Expression>
+}
+
+impl Node for GroupExpression {
+    fn token_literal(&self) -> String {
+        let mut literal = String::from(&self.open_token.literal);
+        literal.push_str(&self.close_token.literal);
+        literal
+    }
+}
+
+impl Expression for GroupExpression {
+    fn expression_node(&self) -> Box<dyn Node> {
+        todo!()
+    }
+}
 
 #[derive(Debug)]
 pub struct LetStatement {
@@ -92,12 +112,52 @@ pub struct LetStatement {
 }
 
 impl Node for LetStatement {
-    fn token_literal(&self) -> &str {
-        &self.token.literal
+    fn token_literal(&self) -> String {
+        self.token.literal.clone()
     }
 }
 
 impl Statement for LetStatement {
+    fn statement_node(&self) -> Box<dyn Node> {
+        todo!()
+    }
+}
+
+#[derive(Debug)]
+pub struct IfStatement {
+    pub token: Token,
+    pub condition: Box<dyn Expression>,
+    pub then: CodeBlock
+}
+
+impl Node for IfStatement {
+    fn token_literal(&self) -> String {
+        self.token.literal.clone()
+    }
+}
+
+impl Statement for IfStatement {
+    fn statement_node(&self) -> Box<dyn Node> {
+        todo!()
+    }
+}
+
+#[derive(Debug)]
+pub struct CodeBlock {
+    pub open_token: Token,
+    pub close_token: Token,
+    pub statements: Vec<Box<dyn Statement>>
+}
+
+impl Node for CodeBlock {
+    fn token_literal(&self) -> String {
+        let mut literal = String::from(&self.open_token.literal);
+        literal.push_str(&self.close_token.literal);
+        literal
+    }
+}
+
+impl Statement for CodeBlock {
     fn statement_node(&self) -> Box<dyn Node> {
         todo!()
     }
