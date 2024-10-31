@@ -1,9 +1,11 @@
 use std::fmt::Debug;
+use std::any::Any;
 
 use crate::lexer::Token;
 
 pub trait Node {
     fn token_literal(&self) -> String;
+    fn as_any(&self) -> &dyn Any;
 }
 
 pub trait Statement : Node + Debug {
@@ -38,6 +40,10 @@ impl Node for Identifier {
     fn token_literal(&self) -> String {
         self.token.literal.clone()
     }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 impl Expression for Identifier {
@@ -55,6 +61,10 @@ pub struct Number {
 impl Node for Number {
     fn token_literal(&self) -> String {
         self.token.literal.clone()
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
@@ -74,6 +84,9 @@ pub struct ArithmaticExpression {
 impl Node for ArithmaticExpression {
     fn token_literal(&self) -> String {
         self.token.literal.clone()
+    }
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
@@ -96,6 +109,9 @@ impl Node for GroupExpression {
         literal.push_str(&self.close_token.literal);
         literal
     }
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 impl Expression for GroupExpression {
@@ -115,6 +131,9 @@ impl Node for LetStatement {
     fn token_literal(&self) -> String {
         self.token.literal.clone()
     }
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 impl Statement for LetStatement {
@@ -133,6 +152,9 @@ pub struct IfStatement {
 impl Node for IfStatement {
     fn token_literal(&self) -> String {
         self.token.literal.clone()
+    }
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
@@ -154,6 +176,9 @@ impl Node for CodeBlock {
         let mut literal = String::from(&self.open_token.literal);
         literal.push_str(&self.close_token.literal);
         literal
+    }
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
