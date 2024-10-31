@@ -272,12 +272,13 @@ impl<'a> Parser<'a> {
 
 #[cfg(test)]
 mod tests {
+    use std::any::Any;
+
     use super::*;
     use ast::Node;
 
-    fn expect_coerce_to_let(statement: &dyn ast::Statement) -> &ast::LetStatement {
-        let statement = statement.as_any();
-        statement.downcast_ref::<ast::LetStatement>().expect("Failed to downcast statement to let statement!")
+    fn expect_coerce<T: 'static>(statement: &dyn Any) -> &T {
+        statement.downcast_ref::<T>().expect("Failed to downcast &dyn Node to concrete type!")
     }
 
     fn test_let(let_statement: &ast::LetStatement, name: String) {
@@ -285,19 +286,9 @@ mod tests {
         assert_eq!(let_statement.identifier.token_literal(), name);
     }
 
-    fn expect_coerce_to_number(expression: &dyn ast::Expression) -> &ast::Number {
-        let expression = expression.as_any();
-        expression.downcast_ref::<ast::Number>().expect("Failed to downcast expression to number literal!")
-    }
-
     fn test_number(number_literal: &ast::Number, value: i64) {
         assert_eq!(number_literal.value, value);
         assert_eq!(number_literal.token_literal(), value.to_string());
-    }
-
-    fn expect_coerce_to_if(statement: &dyn ast::Statement) -> &ast::IfStatement {
-        let statement = statement.as_any();
-        statement.downcast_ref::<ast::IfStatement>().expect("Failed to downcast statement to if statement")
     }
 
     #[test]
@@ -312,23 +303,23 @@ mod tests {
         // Test Statement 1
         let statement_1 = statements.next().unwrap();
         assert_eq!(statement_1.token_literal(), "let");
-        let let_1 = expect_coerce_to_let(statement_1.as_ref());
+        let let_1 = expect_coerce::<ast::LetStatement>(statement_1.as_any());
         test_let(let_1, String::from("var_x"));
-        let number = expect_coerce_to_number(let_1.expression.as_ref());
+        let number = expect_coerce::<ast::Number>(let_1.expression.as_any());
         test_number(number, 20);
         // Test Statement 2
         let statement_2 = statements.next().unwrap();
         assert_eq!(statement_2.token_literal(), "let");
-        let let_2 = expect_coerce_to_let(statement_2.as_ref());
+        let let_2 = expect_coerce::<ast::LetStatement>(statement_2.as_any());
         test_let(let_2, String::from("var_y"));
-        let number = expect_coerce_to_number(let_2.expression.as_ref());
+        let number = expect_coerce::<ast::Number>(let_2.expression.as_any());
         test_number(number, 30);
         // Test Statement 3
         let statement_3 = statements.next().unwrap();
         assert_eq!(statement_3.token_literal(), "let");
-        let let_3 = expect_coerce_to_let(statement_3.as_ref());
+        let let_3 = expect_coerce::<ast::LetStatement>(statement_3.as_any());
         test_let(let_3, String::from("var_z"));
-        let number = expect_coerce_to_number(let_3.expression.as_ref());
+        let number = expect_coerce::<ast::Number>(let_3.expression.as_any());
         test_number(number, 1);
     }
 
@@ -341,10 +332,73 @@ mod tests {
         let mut statements = program.unwrap().statements.into_iter();
         let statement = statements.next().expect("First statement in program is None");
         assert_eq!(statement.token_literal(), "if");
-        let if_statement = expect_coerce_to_if(statement.as_ref());
+        let if_statement = expect_coerce::<ast::IfStatement>(statement.as_any());
         let condition = &if_statement.condition;
         assert_eq!(condition.token_literal(), "+");
+        let operation = expect_coerce::<ast::ArithmaticExpression>(condition.as_any());
+        assert_eq!(operation.op1.token_literal(), "i");
+        assert_eq!(operation.op2.token_literal(), "2");
         let then = &if_statement.then;
         assert_eq!(then.token_literal(), "{}");
+    }
+
+    #[test]
+    fn test_program() {
+        let input = String::from("
+let a = 20;
+if a + 2 {
+    let b = 20;
+    let c = i - b;
+}
+let d = (1 * 2) + a;");
+        let mut parser = Parser::new(&input);
+        let program = parser.parse_program();
+        assert!(program.is_ok());
+        let statements = program.unwrap().statements;
+        assert_eq!(statements.len(), 3);
+        let mut statements = statements.into_iter();
+        // Testing First statement is let statement
+        let statement_1 = statements.next().expect("First statement is None");
+        assert_eq!(statement_1.token_literal(), "let");
+        let let_statement = expect_coerce::<ast::LetStatement>(statement_1.as_any());
+        test_let(let_statement, String::from("a"));
+        assert_eq!(let_statement.expression.token_literal(), "20");
+        // Testing second statement is if statement
+        let statement_2 = statements.next().expect("Second statement is None");
+        assert_eq!(statement_2.token_literal(), "if");
+        let if_statement = expect_coerce::<ast::IfStatement>(statement_2.as_any());
+        let condition = &if_statement.condition;
+        assert_eq!(condition.token_literal(), "+");
+        let operation = expect_coerce::<ast::ArithmaticExpression>(condition.as_any());
+        assert_eq!(operation.op1.token_literal(), "a");
+        assert_eq!(operation.op2.token_literal(), "2");
+        assert_eq!(if_statement.then.token_literal(), "{}");
+        let then_code_block = expect_coerce::<ast::CodeBlock>(&if_statement.then);
+        assert_eq!(then_code_block.statements.len(), 2);
+        // Testing interior of if statement
+        let mut then_statements = then_code_block.statements.iter();
+        let statement_1 = then_statements.next().expect("First statement in if block is None");
+        assert_eq!(statement_1.token_literal(), "let");
+        // TODO expand
+        let statement_2 = then_statements.next().expect("Second statement in if block is None");
+        assert_eq!(statement_2.token_literal(), "let");
+        // TODO expand
+        // Testing statement 3 complex math let statement
+        let statement_3 = statements.next().expect("Third statement is None");
+        assert_eq!(statement_3.token_literal(), "let");
+        let let_statement = expect_coerce::<ast::LetStatement>(statement_3.as_any());
+        test_let(let_statement, String::from("d"));
+        let let_expression = let_statement.expression.as_ref();
+        assert_eq!(let_expression.token_literal(), "+");
+        let addition_expression = expect_coerce::<ast::ArithmaticExpression>(let_expression.as_any());
+        let lhs = &addition_expression.op1;
+        assert_eq!(lhs.token_literal(), "()");
+        let rhs = &addition_expression.op2;
+        assert_eq!(rhs.token_literal(), "a");
+        let group_expression = expect_coerce::<ast::GroupExpression>(lhs.as_any());
+        assert_eq!(group_expression.expression.token_literal(), "*");
+        let multiplication_expression = expect_coerce::<ast::ArithmaticExpression>(group_expression.expression.as_any());
+        assert_eq!(multiplication_expression.op1.token_literal(), "1");
+        assert_eq!(multiplication_expression.op2.token_literal(), "2");
     }
 }
