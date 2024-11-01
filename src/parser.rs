@@ -66,6 +66,7 @@ impl<'a> Parser<'a> {
         match self.current_token.as_ref().unwrap().token_type {
             TOKENTYPE::LET => Ok(self.parse_let_statement()?),
             TOKENTYPE::IF => Ok(self.parse_if_statement()?),
+            TOKENTYPE::RETURN => Ok(self.parse_return_statement()?),
             _ => Err(String::from("Invalid statement"))
         }
     }
@@ -122,6 +123,27 @@ impl<'a> Parser<'a> {
         }))
     }
 
+    // Precondition: Caller must only call this if the current token is an if token
+    fn parse_return_statement(&mut self) -> Result<Box<ast::ReturnStatement>, String> {
+        assert!(self.current_token.is_some());
+        assert_eq!(self.current_token.as_ref().unwrap().token_type, TOKENTYPE::RETURN);
+        let token = self.current_token.take().unwrap();
+        self.next_token();
+        if self.current_token.is_none() {
+            return Err(String::from("Invalid return statement: return can not be the last token, did you forget a \";\""));
+        }
+        let return_value = match self.current_token.as_ref().unwrap().token_type {
+            TOKENTYPE::SEMICOLON => {
+                self.next_token();
+                None
+            }
+            _ => Some(self.parse_expression()?)
+        };
+        Ok(Box::from(ast::ReturnStatement {
+            token,
+            return_value
+        }))
+    }
 
     fn parse_expression(&mut self) -> Result<Box<dyn ast::Expression>, String> {
         // invalid expression if it is blank
@@ -327,9 +349,8 @@ mod tests {
     fn test_if_statement() {
         let input = String::from("if i + 2 { let b = 20; }");
         let mut parser = Parser::new(&input);
-        let program = parser.parse_program();
-        assert!(program.is_ok());
-        let mut statements = program.unwrap().statements.into_iter();
+        let program = parser.parse_program().expect("Failed to parse Program");
+        let mut statements = program.statements.into_iter();
         let statement = statements.next().expect("First statement in program is None");
         assert_eq!(statement.token_literal(), "if");
         let if_statement = expect_coerce::<ast::IfStatement>(statement.as_any());
@@ -343,12 +364,45 @@ mod tests {
     }
 
     #[test]
+    fn test_return_statement() {
+        let input = String::from("return 20; return (2 * 3) + a;");
+        let mut parser = Parser::new(&input);
+        let program = parser.parse_program().expect("Failed to parse Program;");
+        // Test statements has right length
+        let mut statements = program.statements.into_iter();
+        assert_eq!(statements.len(), 2);
+        // Test that first return is correct
+        let statement_1 = statements.next().expect("First statement in program is None");
+        assert_eq!(statement_1.token_literal(), "return");
+        let return_1 = expect_coerce::<ast::ReturnStatement>(statement_1.as_any());
+        assert_eq!(return_1.return_value.as_ref().expect("First return value is None").token_literal(), "20");
+        // Test that second return is correct
+        let statement_2 = statements.next().expect("Second statement in program is None");
+        assert_eq!(statement_2.token_literal(), "return");
+        let return_2 = expect_coerce::<ast::ReturnStatement>(statement_2.as_any());
+        let return_2_value = return_2.return_value.as_ref().expect("Second return value is None");
+        assert_eq!(return_2_value.token_literal(), "+");
+    }
+
+    #[test]
+    fn test_return_none() {
+        let input = String::from("return;");
+        let mut parser = Parser::new(&input);
+        let statements = parser.parse_program().expect("Failed to parse program").statements;
+        assert_eq!(statements.len(), 1);
+        let return_statement = statements.into_iter().next().expect("First statement in program is None");
+        assert_eq!(return_statement.token_literal(), "return");
+        let return_statement = expect_coerce::<ast::ReturnStatement>(return_statement.as_any());
+        assert!(return_statement.return_value.is_none());
+    }
+
+    #[test]
     fn test_program() {
         let input = String::from("
 let a = 20;
 if a + 2 {
     let b = 20;
-    let c = i - b;
+    return b;
 }
 let d = (1 * 2) + a;");
         let mut parser = Parser::new(&input);
@@ -376,13 +430,19 @@ let d = (1 * 2) + a;");
         let then_code_block = expect_coerce::<ast::CodeBlock>(&if_statement.then);
         assert_eq!(then_code_block.statements.len(), 2);
         // Testing interior of if statement
+        // Testing interior statement 1
         let mut then_statements = then_code_block.statements.iter();
         let statement_1 = then_statements.next().expect("First statement in if block is None");
         assert_eq!(statement_1.token_literal(), "let");
-        // TODO expand
+        let statement_1 = expect_coerce::<ast::LetStatement>(statement_1.as_any());
+        test_let(statement_1, String::from("b"));
+        assert_eq!(statement_1.expression.token_literal(), "20");
+        // Testing interior statement 2
         let statement_2 = then_statements.next().expect("Second statement in if block is None");
-        assert_eq!(statement_2.token_literal(), "let");
-        // TODO expand
+        assert_eq!(statement_2.token_literal(), "return");
+        let statement_2 = expect_coerce::<ast::ReturnStatement>(statement_2.as_any());
+        assert!(statement_2.return_value.is_some());
+        assert_eq!(statement_2.return_value.as_ref().unwrap().token_literal(), "b");
         // Testing statement 3 complex math let statement
         let statement_3 = statements.next().expect("Third statement is None");
         assert_eq!(statement_3.token_literal(), "let");

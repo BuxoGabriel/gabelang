@@ -23,6 +23,7 @@ pub enum TOKENTYPE {
     FN,
     IF,
     ELSE,
+    RETURN,
     TRUE,
     FALSE,
     NUMBER,
@@ -175,6 +176,7 @@ impl<'a> Lexer<'a> {
     fn literal_keyword(literal: &String) -> TOKENTYPE {
         match literal.as_str() {
             "let" => TOKENTYPE::LET,
+            "return" =>TOKENTYPE::RETURN,
             "fn" => TOKENTYPE::FN,
             "if" => TOKENTYPE::IF,
             "else" => TOKENTYPE::ELSE,

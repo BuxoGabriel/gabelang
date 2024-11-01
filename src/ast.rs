@@ -165,6 +165,27 @@ impl Statement for IfStatement {
 }
 
 #[derive(Debug)]
+pub struct ReturnStatement {
+    pub token: Token,
+    pub return_value: Option<Box<dyn Expression>>
+}
+
+impl Node for ReturnStatement {
+    fn token_literal(&self) -> String {
+        self.token.literal.clone()
+    }
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+impl Statement for ReturnStatement {
+    fn statement_node(&self) -> Box<dyn Node> {
+        todo!()
+    }
+}
+
+#[derive(Debug)]
 pub struct CodeBlock {
     pub open_token: Token,
     pub close_token: Token,
