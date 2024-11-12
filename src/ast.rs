@@ -6,6 +6,7 @@ use crate::lexer::Token;
 pub trait Node {
     fn token_literal(&self) -> String;
     fn as_any(&self) -> &dyn Any;
+    fn to_string(&self) -> String;
 }
 
 pub trait Statement : Node + Debug {
@@ -21,12 +22,24 @@ pub struct Program {
     pub statements: Vec<Box<dyn Statement>>,
 }
 
-impl Program {
-    pub fn token_literal(&self) -> String {
+impl Node for Program {
+    fn token_literal(&self) -> String {
         match &self.statements.get(0) {
             Some(statement) => statement.token_literal(),
             None => String::from("")
         }
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn to_string(&self) -> String {
+        let mut output = String::new();
+        for statement in self.statements.iter() {
+            output.push_str(&statement.to_string())
+        }
+        output
     }
 }
 
@@ -43,6 +56,10 @@ impl Node for Identifier {
 
     fn as_any(&self) -> &dyn Any {
         self
+    }
+
+    fn to_string(&self) -> String {
+        self.name.clone()
     }
 }
 
@@ -66,6 +83,10 @@ impl Node for Number {
     fn as_any(&self) -> &dyn Any {
         self
     }
+
+    fn to_string(&self) -> String {
+        self.value.to_string()
+    }
 }
 
 impl Expression for Number {
@@ -75,22 +96,32 @@ impl Expression for Number {
 }
 
 #[derive(Debug)]
-pub struct ArithmaticExpression {
+pub struct InfixExpression {
     pub token: Token,
     pub op1: Box<dyn Expression>,
     pub op2: Box<dyn Expression>
 }
 
-impl Node for ArithmaticExpression {
+impl Node for InfixExpression {
     fn token_literal(&self) -> String {
         self.token.literal.clone()
     }
     fn as_any(&self) -> &dyn Any {
         self
     }
+    fn to_string(&self) -> String {
+        let mut output = String::from('(');
+        output.push_str(&self.op1.to_string());
+        output.push(' ');
+        output.push_str(&self.token_literal());
+        output.push(' ');
+        output.push_str(&self.op2.to_string());
+        output.push(')');
+        output
+    }
 }
 
-impl Expression for ArithmaticExpression {
+impl Expression for InfixExpression {
     fn expression_node(&self) -> Box<dyn Node> {
         todo!()
     }
@@ -112,6 +143,12 @@ impl Node for GroupExpression {
     fn as_any(&self) -> &dyn Any {
         self
     }
+    fn to_string(&self) -> String {
+        let mut output = String::from('(');
+        output.push_str(&self.expression.to_string());
+        output.push(')');
+        output
+    }
 }
 
 impl Expression for GroupExpression {
@@ -131,8 +168,19 @@ impl Node for LetStatement {
     fn token_literal(&self) -> String {
         self.token.literal.clone()
     }
+
     fn as_any(&self) -> &dyn Any {
         self
+    }
+
+    fn to_string(&self) -> String {
+        let mut output = self.token_literal();
+        output.push(' ');
+        output.push_str(&self.identifier.to_string());
+        output.push_str(" = ");
+        output.push_str(&self.expression.to_string());
+        output.push_str(";\n");
+        output
     }
 }
 
@@ -156,6 +204,14 @@ impl Node for IfStatement {
     fn as_any(&self) -> &dyn Any {
         self
     }
+    fn to_string(&self) -> String {
+        let mut output = self.token_literal();
+        output.push('(');
+        output.push_str(&self.condition.to_string());
+        output.push_str(") ");
+        output.push_str(&self.then.to_string());
+        output
+    }
 }
 
 impl Statement for IfStatement {
@@ -177,9 +233,53 @@ impl Node for ReturnStatement {
     fn as_any(&self) -> &dyn Any {
         self
     }
+    fn to_string(&self) -> String {
+        let mut output = self.token_literal();
+        if let Some(return_value) = &self.return_value {
+            output.push(' ');
+            output.push_str(&return_value.to_string());
+        }
+        output.push_str(";\n");
+        output
+    }
 }
 
 impl Statement for ReturnStatement {
+    fn statement_node(&self) -> Box<dyn Node> {
+        todo!()
+    }
+}
+
+#[derive(Debug)]
+pub struct Function {
+    pub token: Token,
+    pub ident: Identifier,
+    pub params: Vec<Identifier>,
+    pub body: CodeBlock
+}
+
+impl Node for Function {
+    fn token_literal(&self) -> String {
+        self.token.literal.clone()
+    }
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+    fn to_string(&self) -> String {
+        let mut output = self.token_literal();
+        output.push(' ');
+        output.push_str(&self.ident.to_string());
+        output.push('(');
+        for param in self.params.iter() {
+            output.push_str(&param.to_string());
+        }
+        output.push_str(") ");
+        output.push_str(&self.body.to_string());
+        output
+    }
+}
+
+impl Statement for Function {
     fn statement_node(&self) -> Box<dyn Node> {
         todo!()
     }
@@ -200,6 +300,15 @@ impl Node for CodeBlock {
     }
     fn as_any(&self) -> &dyn Any {
         self
+    }
+    fn to_string(&self) -> String {
+        let mut output = String::from("{\n");
+        for statement in self.statements.iter() {
+            output.push_str("    ");
+            output.push_str(&statement.to_string());
+        }
+        output.push_str("}\n");
+        output
     }
 }
 

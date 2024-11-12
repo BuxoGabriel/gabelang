@@ -65,7 +65,7 @@ impl<'a> Lexer<'a> {
         // Whitespace is not part of the language so skip it but it can delimit tokens
         self.skip_whitespace();
         let token_type: TOKENTYPE;
-        let literal: String;
+        let mut literal: String;
         let next_char = self.get_next_char();
         // If no chars are left return None for EOF
         if next_char.is_none() {
@@ -86,6 +86,7 @@ impl<'a> Lexer<'a> {
                 '=' => {
                     if let Some(next_char) = self.peek_next_char() {
                         if *next_char == '=' {
+                            literal = String::from("==");
                             self.get_next_char();
                             TOKENTYPE::EQ
                         } else {
@@ -98,6 +99,7 @@ impl<'a> Lexer<'a> {
                 '!' => {
                     if let Some(next_char) = self.peek_next_char() {
                         if *next_char == '=' {
+                            literal = String::from("!=");
                             self.get_next_char();
                             TOKENTYPE::NOTEQ
                         } else {

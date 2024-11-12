@@ -4,6 +4,7 @@ fn add_one(i) {
 
 let i = 10;
 
-i = add_one(i)
-
-i
+if i * 2 + (3 - i) {
+    let b = i * 2;
+    return b - 1;
+}

@@ -10,7 +10,7 @@ pub fn start() {
         match program_ast {
             Ok(program) => {
                 for line in program.statements.iter() {
-                    println!("{:?}", line);
+                    println!("{}", line.to_string());
                 }
             },
             Err(err_msg) => {
