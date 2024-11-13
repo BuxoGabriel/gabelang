@@ -1,12 +1,14 @@
 use std::fmt::Debug;
 use std::any::Any;
 
+use crate::evaluator::{self, ObjectType};
 use crate::lexer::Token;
 
 pub trait Node {
     fn token_literal(&self) -> String;
     fn as_any(&self) -> &dyn Any;
     fn to_string(&self) -> String;
+    fn eval(&self) -> Result<ObjectType, String>;
 }
 
 pub trait Statement : Node + Debug {
@@ -41,6 +43,10 @@ impl Node for Program {
         }
         output
     }
+
+    fn eval(&self) -> Result<ObjectType, String> {
+        evaluator::eval_program(self)
+    }
 }
 
 #[derive(Debug)]
@@ -60,6 +66,10 @@ impl Node for Identifier {
 
     fn to_string(&self) -> String {
         self.name.clone()
+    }
+
+    fn eval(&self) -> Result<ObjectType, String> {
+        evaluator::eval_identifier(self)
     }
 }
 
@@ -87,6 +97,10 @@ impl Node for Number {
     fn to_string(&self) -> String {
         self.value.to_string()
     }
+
+    fn eval(&self) -> Result<ObjectType, String> {
+        evaluator::eval_number_literal(self)
+    }
 }
 
 impl Expression for Number {
@@ -106,9 +120,11 @@ impl Node for InfixExpression {
     fn token_literal(&self) -> String {
         self.token.literal.clone()
     }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
+
     fn to_string(&self) -> String {
         let mut output = String::from('(');
         output.push_str(&self.op1.to_string());
@@ -118,6 +134,10 @@ impl Node for InfixExpression {
         output.push_str(&self.op2.to_string());
         output.push(')');
         output
+    }
+
+    fn eval(&self) -> Result<ObjectType, String> {
+        evaluator::eval_infix(self)
     }
 }
 
@@ -140,19 +160,56 @@ impl Node for GroupExpression {
         literal.push_str(&self.close_token.literal);
         literal
     }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
+
     fn to_string(&self) -> String {
         let mut output = String::from('(');
         output.push_str(&self.expression.to_string());
         output.push(')');
         output
     }
+
+    fn eval(&self) -> Result<ObjectType, String> {
+        self.expression.eval()
+    }
 }
 
 impl Expression for GroupExpression {
     fn expression_node(&self) -> Box<dyn Node> {
+        todo!()
+    }
+}
+
+#[derive(Debug)]
+pub struct ExpressionStatement {
+    pub expression: Box<dyn Expression>
+}
+
+impl Node for ExpressionStatement {
+    fn token_literal(&self) -> String {
+        self.expression.token_literal()
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn to_string(&self) -> String {
+        let mut output = self.expression.to_string();
+        output.push(';');
+        output
+    }
+
+    fn eval(&self) -> Result<ObjectType, String> {
+        self.expression.eval()
+    }
+}
+
+impl Statement for ExpressionStatement {
+    fn statement_node(&self) -> Box<dyn Node> {
         todo!()
     }
 }
@@ -182,6 +239,10 @@ impl Node for LetStatement {
         output.push_str(";\n");
         output
     }
+
+    fn eval(&self) -> Result<ObjectType, String> {
+        Ok(ObjectType::NULL)
+    }
 }
 
 impl Statement for LetStatement {
@@ -201,9 +262,11 @@ impl Node for IfStatement {
     fn token_literal(&self) -> String {
         self.token.literal.clone()
     }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
+
     fn to_string(&self) -> String {
         let mut output = self.token_literal();
         output.push('(');
@@ -211,6 +274,10 @@ impl Node for IfStatement {
         output.push_str(") ");
         output.push_str(&self.then.to_string());
         output
+    }
+
+    fn eval(&self) -> Result<ObjectType, String> {
+        evaluator::eval_if_statement(self)
     }
 }
 
@@ -242,6 +309,10 @@ impl Node for ReturnStatement {
         output.push_str(";\n");
         output
     }
+
+    fn eval(&self) -> Result<ObjectType, String> {
+        Ok(ObjectType::NULL)
+    }
 }
 
 impl Statement for ReturnStatement {
@@ -262,9 +333,11 @@ impl Node for Function {
     fn token_literal(&self) -> String {
         self.token.literal.clone()
     }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
+
     fn to_string(&self) -> String {
         let mut output = self.token_literal();
         output.push(' ');
@@ -276,6 +349,10 @@ impl Node for Function {
         output.push_str(") ");
         output.push_str(&self.body.to_string());
         output
+    }
+
+    fn eval(&self) -> Result<ObjectType, String> {
+        Ok(ObjectType::NULL)
     }
 }
 
@@ -298,9 +375,11 @@ impl Node for CodeBlock {
         literal.push_str(&self.close_token.literal);
         literal
     }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
+
     fn to_string(&self) -> String {
         let mut output = String::from("{\n");
         for statement in self.statements.iter() {
@@ -309,6 +388,10 @@ impl Node for CodeBlock {
         }
         output.push_str("}\n");
         output
+    }
+
+    fn eval(&self) -> Result<ObjectType, String> {
+        evaluator::eval_codeblock(self)
     }
 }
 

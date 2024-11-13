@@ -68,7 +68,12 @@ impl<'a> Parser<'a> {
             TOKENTYPE::IF => Ok(self.parse_if_statement()?),
             TOKENTYPE::RETURN => Ok(self.parse_return_statement()?),
             TOKENTYPE::FN => Ok(self.parse_function()?),
-            _ => Err(String::from("Invalid statement"))
+            _ => {
+                let expression = Box::from(self.parse_expression(0)?);
+                Ok(Box::from(ast::ExpressionStatement {
+                    expression
+                }))
+            }
         }
     }
 
@@ -346,10 +351,12 @@ impl<'a> Parser<'a> {
         match token {
             TOKENTYPE::EQ |
             TOKENTYPE::NOTEQ => 1,
+            TOKENTYPE::LT |
+            TOKENTYPE::GT => 2,
             TOKENTYPE::PLUS |
-            TOKENTYPE::MINUS => 2,
+            TOKENTYPE::MINUS => 3,
             TOKENTYPE::ASTERISK |
-            TOKENTYPE::SLASH => 3,
+            TOKENTYPE::SLASH => 4,
             _ => -1
         }
     }
@@ -461,7 +468,7 @@ mod tests {
 
     #[test]
     fn test_operator_precidence() {
-        let input = String::from("let a = 1 * 2 - 3 * 4;");
+        let input = String::from("let a = 1 * 2 - 3 == 3 * 4 > 3;");
         let mut parser = Parser::new(&input);
         let statements = parser.parse_program().expect("Failed to parse program").statements;
         assert_eq!(statements.len(), 1);
@@ -469,11 +476,9 @@ mod tests {
         assert_eq!(let_statement.token_literal(), "let");
         let let_statement = expect_coerce::<ast::LetStatement>(let_statement.as_any());
         test_let(let_statement, "a".to_string());
-        assert_eq!(let_statement.expression.token_literal(), "-");
+        assert_eq!(let_statement.expression.token_literal(), "==");
         let expression = expect_coerce::<ast::InfixExpression>(let_statement.expression.as_any());
-        assert_eq!(expression.op1.token_literal(), "*");
-        assert_eq!(expression.op2.token_literal(), "*");
-        assert_eq!(expression.to_string(), "((1 * 2) - (3 * 4))");
+        assert_eq!(expression.to_string(), "(((1 * 2) - 3) == ((3 * 4) > 3))");
     }
 
     #[test]

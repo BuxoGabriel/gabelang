@@ -1,10 +1,13 @@
 use std::{fs, error::Error};
+
 pub mod repl;
 mod lexer;
 mod ast;
 mod parser;
-use ast::Node;
+mod evaluator;
+
 use parser::Parser;
+use ast::Node;
 
 pub struct Config {
     file_name: String
