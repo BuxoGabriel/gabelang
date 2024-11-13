@@ -21,6 +21,10 @@ impl<'a> Parser<'a> {
         self.peek_token = self.lexer.get_next_token();
     }
 
+    fn current_token_is(&self, token_type: TOKENTYPE) -> bool {
+        self.current_token.is_some() && self.current_token.as_ref().unwrap().token_type == token_type
+    }
+
     pub fn parse_program(&mut self) -> Result<ast::Program, String> {
         self.next_token();
         self.next_token();
@@ -44,7 +48,7 @@ impl<'a> Parser<'a> {
         self.next_token();
         let mut statements = Vec::new();
         while self.current_token.is_some() {
-            if self.current_token.as_ref().unwrap().token_type == TOKENTYPE::RSQUIG {
+            if self.current_token_is(TOKENTYPE::RSQUIG) {
                 // If you reach the close token then the block is done being read
                 let close_token: Token = self.current_token.take().unwrap();
                 self.next_token();
@@ -121,11 +125,18 @@ impl<'a> Parser<'a> {
         // Advance to expression to validate
         self.next_token();
         let condition = self.parse_expression(0)?;
-        let then = self.parse_block()?;
+        let then_block = self.parse_block()?;
+        let else_block = if self.current_token_is(TOKENTYPE::ELSE) {
+            self.next_token();
+            Some(self.parse_block()?)
+        } else {
+            None
+        };
         Ok(Box::from(ast::IfStatement {
             token: if_token,
             condition,
-            then
+            then_block,
+            else_block
         }))
     }
 
@@ -281,7 +292,7 @@ impl<'a> Parser<'a> {
         assert_eq!(number_token.token_type, TOKENTYPE::NUMBER);
         // Advance parser to next token
         self.next_token();
-        if self.current_token.is_some() && self.current_token.as_ref().unwrap().token_type == TOKENTYPE::SEMICOLON {
+        if self.current_token_is(TOKENTYPE::SEMICOLON) {
             self.next_token();
         }
         // Create and return number Expression
@@ -429,7 +440,7 @@ mod tests {
         let operation = expect_coerce::<ast::InfixExpression>(condition.as_any());
         assert_eq!(operation.op1.token_literal(), "i");
         assert_eq!(operation.op2.token_literal(), "2");
-        let then = &if_statement.then;
+        let then = &if_statement.then_block;
         assert_eq!(then.token_literal(), "{}");
     }
 
@@ -511,8 +522,8 @@ let d = (1 * 2) + a;");
         let operation = expect_coerce::<ast::InfixExpression>(condition.as_any());
         assert_eq!(operation.op1.token_literal(), "a");
         assert_eq!(operation.op2.token_literal(), "2");
-        assert_eq!(if_statement.then.token_literal(), "{}");
-        let then_code_block = expect_coerce::<ast::CodeBlock>(&if_statement.then);
+        assert_eq!(if_statement.then_block.token_literal(), "{}");
+        let then_code_block = expect_coerce::<ast::CodeBlock>(&if_statement.then_block);
         assert_eq!(then_code_block.statements.len(), 2);
         // Testing interior of if statement
         // Testing interior statement 1

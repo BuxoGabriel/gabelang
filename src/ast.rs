@@ -255,7 +255,8 @@ impl Statement for LetStatement {
 pub struct IfStatement {
     pub token: Token,
     pub condition: Box<dyn Expression>,
-    pub then: CodeBlock
+    pub then_block: CodeBlock,
+    pub else_block: Option<CodeBlock>
 }
 
 impl Node for IfStatement {
@@ -272,7 +273,11 @@ impl Node for IfStatement {
         output.push('(');
         output.push_str(&self.condition.to_string());
         output.push_str(") ");
-        output.push_str(&self.then.to_string());
+        output.push_str(&self.then_block.to_string());
+        if let Some(else_block) = self.else_block.as_ref() {
+            output.push_str("else ");
+            output.push_str(&else_block.to_string());
+        }
         output
     }
 

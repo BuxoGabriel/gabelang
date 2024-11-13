@@ -80,9 +80,12 @@ pub fn eval_if_statement(if_state: &ast::IfStatement) -> Result<ObjectType, Stri
         }
     };
     if condition_result {
-        if_state.then.eval()
+        if_state.then_block.eval()
     } else {
-        Ok(ObjectType::NULL)
+        match if_state.else_block.as_ref() {
+            Some(else_block) => else_block.eval(),
+            None => Ok(ObjectType::NULL)
+        }
     }
 }
 

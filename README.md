@@ -43,3 +43,17 @@ Run tests with
 ```sh
 cargo test
 ```
+
+## Todo
+
+[x] Add else block to if statements
+[ ] Add function calls to ast and parser
+[ ] Add tests to ast and eval modules
+[ ] Finish making evaluator functions for each statement(stateful)
+[ ] Add language flare
+
+### Todo Reach
+
+[ ] Add bytecode compiler
+[ ] Compile to/through c
+[ ] Create VM that can run bytecode
