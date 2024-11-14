@@ -34,7 +34,6 @@ pub fn eval_program(program: &ast::Program) -> Result<GabrValue, String> {
     for statement in program.statements.iter() {
         result = statement.eval()?;
         if result.returning {
-            result.returning = false;
             return Ok(result)
         }
     }
@@ -46,7 +45,6 @@ pub fn eval_codeblock(block: &ast::CodeBlock) -> Result<GabrValue, String> {
     for statement in block.statements.iter() {
         result = statement.eval()?;
         if result.returning {
-            result.returning = false;
             return Ok(result)
         }
     }
