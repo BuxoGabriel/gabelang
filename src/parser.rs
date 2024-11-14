@@ -187,15 +187,19 @@ impl<'a> Parser<'a> {
         self.next_token();
         let mut params = Vec::new();
         while self.current_token.is_some() {
-            let ident = self.current_token.as_ref().unwrap();
-            if ident.token_type == TOKENTYPE::RPAREN {
+            if self.current_token_is(TOKENTYPE::RPAREN) {
                 self.next_token();
                 break;
             }
-            if ident.token_type != TOKENTYPE::IDENTIFIER {
+            if !self.current_token_is(TOKENTYPE::IDENTIFIER){
                 return Err("Invalid function: Invalid function parameter".to_string());
             }
             params.push(self.parse_identifier());
+            if self.current_token_is(TOKENTYPE::COMMA) {
+                self.next_token()
+            } else {
+                break
+            }
         }
         // Move on to then block
         if self.current_token.is_none() || self.current_token.as_ref().unwrap().token_type != TOKENTYPE::LSQUIG {
@@ -244,12 +248,11 @@ impl<'a> Parser<'a> {
         if self.current_token.is_none() {
             return Err("Invalid Expression: Expression must start with a literal or variable".to_string());
         }
-        let current_token_type = self.current_token.as_ref().unwrap().token_type.clone();
         // Return group expression if expression starts with an open paren
-        if current_token_type == TOKENTYPE::LPAREN {
+        if self.current_token_is(TOKENTYPE::LPAREN) {
             return Ok(self.parse_group_expression()?)
         }
-        if current_token_type != TOKENTYPE::NUMBER && current_token_type != TOKENTYPE::IDENTIFIER {
+        if !self.current_token_is(TOKENTYPE::NUMBER) && !self.current_token_is(TOKENTYPE::IDENTIFIER) {
             return Err("Invalid Expression: Expression start with a literal or variable".to_string());
         }
         // Get "left side" of the expression
@@ -314,7 +317,7 @@ impl<'a> Parser<'a> {
         // Advance parser to next token
         self.next_token();
         assert!(self.current_token.is_some());
-        if self.current_token.as_ref().unwrap().token_type == TOKENTYPE::SEMICOLON {
+        if self.current_token_is(TOKENTYPE::SEMICOLON) {
             self.next_token();
         }
         ast::Identifier {
@@ -377,13 +380,12 @@ impl<'a> Parser<'a> {
         if self.current_token.is_none() {
             return Err(String::from("Group expression closing can not be last token, did you forget a \";\""));
         }
-        let next_token_type = self.current_token.as_ref().unwrap().token_type.clone();
-        if next_token_type == TOKENTYPE::SEMICOLON {
+        if self.current_token_is(TOKENTYPE::SEMICOLON) {
             self.next_token();
         }
 
         // If next token is arithmatic then pass in the group expression as the lhs
-        if Parser::token_type_is_arithmatic(next_token_type) {
+        if self.current_token.is_some() && Parser::token_type_is_arithmatic(self.current_token.as_ref().unwrap().token_type.clone()) {
             expression = self.parse_infix(expression)?;
         }
         Ok(expression)
