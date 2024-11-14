@@ -46,7 +46,6 @@ cargo test
 
 ## Todo
 
-[x] Add else block to if statements
 [ ] Add function calls to ast and parser
 [ ] Add tests to ast and eval modules
 [ ] Finish making evaluator functions for each statement(stateful)
