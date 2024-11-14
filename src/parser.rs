@@ -25,6 +25,10 @@ impl<'a> Parser<'a> {
         self.current_token.is_some() && self.current_token.as_ref().unwrap().token_type == token_type
     }
 
+    fn peek_token_is(&self, token_type: TOKENTYPE) -> bool {
+        self.peek_token.is_some() && self.peek_token.as_ref().unwrap().token_type == token_type
+    }
+
     pub fn parse_program(&mut self) -> Result<ast::Program, String> {
         self.next_token();
         self.next_token();
@@ -206,6 +210,35 @@ impl<'a> Parser<'a> {
         }))
     }
 
+    // Precondition: Caller must make sure that current token is an identifier and that the
+    // next token is an open parenthesis
+    fn parse_function_call(&mut self) -> Result<ast::FunctionCall, String> {
+        assert!(self.current_token_is(TOKENTYPE::IDENTIFIER));
+        // Get function Identifier
+        let name = self.parse_identifier();
+        assert!(self.current_token_is(TOKENTYPE::LPAREN));
+        let mut params: Vec<Box<dyn ast::Expression>> = Vec::new();
+        while self.current_token_is(TOKENTYPE::IDENTIFIER) {
+            params.push(self.parse_expression(0)?);
+            if self.current_token_is(TOKENTYPE::COMMA) {
+                self.next_token()
+            } else {
+                break
+            }
+        }
+        // Param list should end with a close parenthesis otherwise it is an invalid
+        // function call
+        if self.current_token_is(TOKENTYPE::RPAREN) {
+            self.next_token();
+        } else {
+            return Err("Invalid Function Call: Function call must end parameter list with a close parenthesis".to_string());
+        }
+        Ok(ast::FunctionCall {
+            name,
+            params
+        })
+    }
+
     fn parse_expression(&mut self, precidence: i8) -> Result<Box<dyn ast::Expression>, String> {
         // invalid expression if it is blank
         if self.current_token.is_none() {
@@ -239,15 +272,22 @@ impl<'a> Parser<'a> {
 
     // Parses infix expressions including literals and identifiers
     fn parse_prefix(&mut self) -> Result<Box<dyn ast::Expression>, String> {
-        if let Some(token) = self.current_token.as_ref() {
-            match token.token_type {
-                TOKENTYPE::IDENTIFIER => Ok(Box::from(self.parse_identifier())),
-                TOKENTYPE::NUMBER => Ok(self.parse_number()?),
-                _ => Err("Invalid Expression: Expression must start with a literal or variable".to_string())
+        let token = if self.current_token.is_some() {
+            self.current_token.as_ref().unwrap()
+        } else {
+            return Err("Invalid Expression: Expression must start with a literal or variable".to_string());
+        };
+        match token.token_type {
+            TOKENTYPE::IDENTIFIER => {
+                let expression: Box<dyn ast::Expression> = if self.peek_token_is(TOKENTYPE::LPAREN) {
+                    Box::from(self.parse_function_call()?)
+                } else {
+                    Box::from(self.parse_identifier())
+                };
+                Ok(expression)
             }
-        }
-        else {
-            Err("Invalid Expression: Expression must start with a literal or variable".to_string())
+            TOKENTYPE::NUMBER => Ok(self.parse_number()?),
+            _ => Err("Invalid Expression: Expression must start with a literal or variable".to_string())
         }
     }
 

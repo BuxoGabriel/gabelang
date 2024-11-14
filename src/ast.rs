@@ -368,6 +368,43 @@ impl Statement for Function {
 }
 
 #[derive(Debug)]
+pub struct FunctionCall {
+    pub name: Identifier,
+    pub params: Vec<Box<dyn Expression>>
+}
+
+impl Node for FunctionCall {
+    fn token_literal(&self) -> String {
+        self.name.token_literal()
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn to_string(&self) -> String {
+        let mut output = self.token_literal();
+        output.push('(');
+        for param in self.params.iter() {
+            output.push_str(&param.to_string());
+            output.push_str(", ");
+        }
+        output.push(')');
+        output
+    }
+
+    fn eval(&self) -> Result<ObjectType, String> {
+        Ok(ObjectType::NULL)
+    }
+}
+
+impl Expression for FunctionCall {
+    fn expression_node(&self) -> Box<dyn Node> {
+        todo!()
+    }
+}
+
+#[derive(Debug)]
 pub struct CodeBlock {
     pub open_token: Token,
     pub close_token: Token,
