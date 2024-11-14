@@ -46,13 +46,12 @@ cargo test
 
 ## Todo
 
-[ ] Add function calls to ast and parser
-[ ] Add tests to ast and eval modules
-[ ] Finish making evaluator functions for each statement(stateful)
-[ ] Add language flare
+- Add tests to ast and eval modules
+- Finish making evaluator functions for each statement(stateful)
+- Add fun language syntax
 
 ### Todo Reach
 
-[ ] Add bytecode compiler
-[ ] Compile to/through c
-[ ] Create VM that can run bytecode
+- Add bytecode compiler
+- Create VM that can run bytecode
+- Compile to/through c

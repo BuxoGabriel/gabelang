@@ -1,14 +1,14 @@
 use std::fmt::Debug;
 use std::any::Any;
 
-use crate::evaluator::{self, GabrValue};
+use crate::evaluator::{self, GabrEnv, GabrValue};
 use crate::lexer::Token;
 
 pub trait Node {
     fn token_literal(&self) -> String;
     fn as_any(&self) -> &dyn Any;
     fn to_string(&self) -> String;
-    fn eval(&self) -> Result<GabrValue, String>;
+    fn eval(&self, env: &mut GabrEnv) -> Result<GabrValue, String>;
 }
 
 pub trait Statement : Node + Debug {
@@ -44,8 +44,8 @@ impl Node for Program {
         output
     }
 
-    fn eval(&self) -> Result<GabrValue, String> {
-        evaluator::eval_program(self)
+    fn eval(&self, env: &mut GabrEnv) -> Result<GabrValue, String> {
+        evaluator::eval_program(env, self)
     }
 }
 
@@ -68,8 +68,8 @@ impl Node for Identifier {
         self.name.clone()
     }
 
-    fn eval(&self) -> Result<GabrValue, String> {
-        evaluator::eval_not_implemented()
+    fn eval(&self, env: &mut GabrEnv) -> Result<GabrValue, String> {
+        evaluator::eval_identifier(env, self)
     }
 }
 
@@ -98,7 +98,7 @@ impl Node for Number {
         self.value.to_string()
     }
 
-    fn eval(&self) -> Result<GabrValue, String> {
+    fn eval(&self, _: &mut GabrEnv) -> Result<GabrValue, String> {
         evaluator::eval_number_literal(self)
     }
 }
@@ -136,8 +136,8 @@ impl Node for InfixExpression {
         output
     }
 
-    fn eval(&self) -> Result<GabrValue, String> {
-        evaluator::eval_infix(self)
+    fn eval(&self, env: &mut GabrEnv) -> Result<GabrValue, String> {
+        evaluator::eval_infix(env, self)
     }
 }
 
@@ -172,8 +172,8 @@ impl Node for GroupExpression {
         output
     }
 
-    fn eval(&self) -> Result<GabrValue, String> {
-        self.expression.eval()
+    fn eval(&self, env: &mut GabrEnv) -> Result<GabrValue, String> {
+        self.expression.eval(env)
     }
 }
 
@@ -203,8 +203,8 @@ impl Node for ExpressionStatement {
         output
     }
 
-    fn eval(&self) -> Result<GabrValue, String> {
-        self.expression.eval()
+    fn eval(&self, env: &mut GabrEnv) -> Result<GabrValue, String> {
+        self.expression.eval(env)
     }
 }
 
@@ -240,8 +240,8 @@ impl Node for LetStatement {
         output
     }
 
-    fn eval(&self) -> Result<GabrValue, String> {
-        evaluator::eval_not_implemented()
+    fn eval(&self, env: &mut GabrEnv) -> Result<GabrValue, String> {
+        evaluator::eval_let_statement(env, self)
     }
 }
 
@@ -281,8 +281,8 @@ impl Node for IfStatement {
         output
     }
 
-    fn eval(&self) -> Result<GabrValue, String> {
-        evaluator::eval_if_statement(self)
+    fn eval(&self, env: &mut GabrEnv) -> Result<GabrValue, String> {
+        evaluator::eval_if_statement(env, self)
     }
 }
 
@@ -315,8 +315,8 @@ impl Node for ReturnStatement {
         output
     }
 
-    fn eval(&self) -> Result<GabrValue, String> {
-        evaluator::eval_return_statement(self)
+    fn eval(&self, env: &mut GabrEnv) -> Result<GabrValue, String> {
+        evaluator::eval_return_statement(env, self)
     }
 }
 
@@ -356,7 +356,7 @@ impl Node for Function {
         output
     }
 
-    fn eval(&self) -> Result<GabrValue, String> {
+    fn eval(&self, _: &mut GabrEnv) -> Result<GabrValue, String> {
         evaluator::eval_not_implemented()
     }
 }
@@ -393,7 +393,7 @@ impl Node for FunctionCall {
         output
     }
 
-    fn eval(&self) -> Result<GabrValue, String> {
+    fn eval(&self, env: &mut GabrEnv) -> Result<GabrValue, String> {
         evaluator::eval_not_implemented()
     }
 }
@@ -432,8 +432,8 @@ impl Node for CodeBlock {
         output
     }
 
-    fn eval(&self) -> Result<GabrValue, String> {
-        evaluator::eval_codeblock(self)
+    fn eval(&self, env: &mut GabrEnv) -> Result<GabrValue, String> {
+        evaluator::eval_codeblock(env, self)
     }
 }
 

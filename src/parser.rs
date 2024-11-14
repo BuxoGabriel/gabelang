@@ -102,9 +102,7 @@ impl<'a> Parser<'a> {
             return Err(String::from("Let statement must have an identifier after keyword let"));
         }
         // If no token after identifier or token after identifier is not an equal sign it is an invalid let statement
-        if 
-        self.peek_token.is_none() ||
-        self.peek_token.as_ref().unwrap().token_type != TOKENTYPE::EQUAL {
+        if !self.peek_token_is(TOKENTYPE::EQUAL) {
             return Err(String::from("Let statement must have a \"=\" after variable name"));
         }
         // Now that we know that parse identifier will not panic, i.e., it is followed by a token, we get the identifier token
@@ -112,6 +110,11 @@ impl<'a> Parser<'a> {
         // Advance to expression / skip equal sign
         self.next_token();
         let expression = self.parse_expression(0)?;
+        if !self.current_token_is(TOKENTYPE::SEMICOLON) {
+            return Err(String::from("Let statement must end with a semicolon"));
+        } else {
+            self.next_token();
+        }
         Ok(Box::from(ast::LetStatement {
             identifier,
             token: let_token,
@@ -144,22 +147,24 @@ impl<'a> Parser<'a> {
         }))
     }
 
-    // Precondition: Caller must only call this if the current token is an if token
+    // Precondition: Caller must only call this if the current token is a return token
     fn parse_return_statement(&mut self) -> Result<Box<ast::ReturnStatement>, String> {
-        assert!(self.current_token.is_some());
-        assert_eq!(self.current_token.as_ref().unwrap().token_type, TOKENTYPE::RETURN);
+        assert!(self.current_token_is(TOKENTYPE::RETURN));
         let token = self.current_token.take().unwrap();
         self.next_token();
         if self.current_token.is_none() {
-            return Err(String::from("Invalid return statement: return can not be the last token, did you forget a \";\""));
+            return Err(String::from("Invalid return statement: return can not be the last token, did you forget a semicolon"));
         }
-        let return_value = match self.current_token.as_ref().unwrap().token_type {
-            TOKENTYPE::SEMICOLON => {
-                self.next_token();
-                None
-            }
-            _ => Some(self.parse_expression(0)?)
+        let return_value = if self.current_token_is(TOKENTYPE::SEMICOLON) {
+            None
+        } else {
+            Some(self.parse_expression(0)?)
         };
+        if !self.current_token_is(TOKENTYPE::SEMICOLON) {
+            return Err("Invalid return statement: expected semicolon".to_string()); 
+        } else {
+            self.next_token();
+        }
         Ok(Box::from(ast::ReturnStatement {
             token,
             return_value
@@ -253,7 +258,7 @@ impl<'a> Parser<'a> {
             return Ok(self.parse_group_expression()?)
         }
         if !self.current_token_is(TOKENTYPE::NUMBER) && !self.current_token_is(TOKENTYPE::IDENTIFIER) {
-            return Err("Invalid Expression: Expression start with a literal or variable".to_string());
+            return Err(format!("Invalid Expression: Expression must start with a literal or variable, started with: {:?}", self.current_token));
         }
         // Get "left side" of the expression
         let mut left_side: Box<dyn ast::Expression> = self.parse_prefix()?;
@@ -308,7 +313,6 @@ impl<'a> Parser<'a> {
     }
 
     // Precondition: Caller must check that current_token is an identifier
-    // Additionally, the identifier should never be the last token of the program
     fn parse_identifier(&mut self) -> ast::Identifier {
         // Assert that the current token is a number
         assert_eq!(self.current_token.is_none(), false);
@@ -316,10 +320,6 @@ impl<'a> Parser<'a> {
         assert_eq!(identifier_token.token_type, TOKENTYPE::IDENTIFIER);
         // Advance parser to next token
         self.next_token();
-        assert!(self.current_token.is_some());
-        if self.current_token_is(TOKENTYPE::SEMICOLON) {
-            self.next_token();
-        }
         ast::Identifier {
             name: identifier_token.literal.clone(),
             token: identifier_token
@@ -327,7 +327,6 @@ impl<'a> Parser<'a> {
     }
 
     // Precondition: Caller must check that current_token is a number
-    // Additionally, the parsed number should never be the last token of the program
     fn parse_number(&mut self) -> Result<Box<ast::Number>, String> {
         // Assert that the current token is a number
         assert_eq!(self.current_token.is_none(), false);
@@ -335,9 +334,6 @@ impl<'a> Parser<'a> {
         assert_eq!(number_token.token_type, TOKENTYPE::NUMBER);
         // Advance parser to next token
         self.next_token();
-        if self.current_token_is(TOKENTYPE::SEMICOLON) {
-            self.next_token();
-        }
         // Create and return number Expression
         let value = match number_token.literal.parse::<i64>() {
             Ok(num) => num,

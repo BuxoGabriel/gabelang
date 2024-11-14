@@ -1,5 +1,51 @@
+use std::collections::HashMap;
+
 use crate::ast::{self, Node};
 
+pub struct GabrEnv {
+    scopes: Vec<HashMap<String, GabrValue>>
+}
+
+impl GabrEnv {
+    pub fn new() -> Self {
+        let scopes = vec![HashMap::new()];
+        Self { scopes }
+    }
+
+    fn create_var(&mut self, name: String, val: GabrValue) {
+        let scope = self.scopes.last_mut().expect("Tried to create variable but no scopes are available in environment");
+        scope.insert(name, val);
+    }
+
+    fn set_var(&mut self, name: String, val: GabrValue) -> Result<(),String> {
+        for scope in self.scopes.iter_mut().rev() {
+            if scope.contains_key(&name) {
+                scope.insert(name.clone(), val);
+                return Ok(())
+            }
+        }
+        Err("Environment does not contain variable to be altered".to_string())
+    }
+
+    fn get_var(&self, name: String) -> Option<&GabrValue> {
+        for scope in self.scopes.iter().rev() {
+            if let Some(val) = scope.get(&name) {
+                return Some(val);
+            }
+        }
+        None
+    }
+
+    fn push_scope(&mut self) {
+        self.scopes.push(HashMap::new());
+    }
+
+    fn pop_scope(&mut self) {
+        self.scopes.pop();
+    }
+}
+
+#[derive(Clone)]
 pub struct GabrValue {
     gabr_type: ObjectType,
     returning: bool,
@@ -15,6 +61,7 @@ impl GabrValue {
     }
 }
 
+#[derive(Clone)]
 enum ObjectType {
     NUMBER(i64),
     NULL
@@ -29,10 +76,10 @@ impl ObjectType {
     }
 }
 
-pub fn eval_program(program: &ast::Program) -> Result<GabrValue, String> {
+pub fn eval_program(env: &mut GabrEnv, program: &ast::Program) -> Result<GabrValue, String> {
     let mut result = GabrValue::new(ObjectType::NULL, false);
     for statement in program.statements.iter() {
-        result = statement.eval()?;
+        result = statement.eval(env)?;
         if result.returning {
             return Ok(result)
         }
@@ -40,38 +87,47 @@ pub fn eval_program(program: &ast::Program) -> Result<GabrValue, String> {
     Ok(result)
 }
 
-pub fn eval_codeblock(block: &ast::CodeBlock) -> Result<GabrValue, String> { 
+pub fn eval_codeblock(env: &mut GabrEnv, block: &ast::CodeBlock) -> Result<GabrValue, String> { 
     let mut result = GabrValue::new(ObjectType::NULL, false);
+    env.push_scope();
     for statement in block.statements.iter() {
-        result = statement.eval()?;
+        result = statement.eval(env)?;
         if result.returning {
+            env.pop_scope();
             return Ok(result)
         }
     }
+    env.pop_scope();
     Ok(result)
 }
 
-pub fn eval_if_statement(if_state: &ast::IfStatement) -> Result<GabrValue, String> {
-    let condition_result = match if_state.condition.eval()?.gabr_type {
+pub fn eval_let_statement(env: &mut GabrEnv, let_state: &ast::LetStatement) -> Result<GabrValue, String> {
+    let val = let_state.expression.eval(env)?;
+    env.create_var(let_state.identifier.name.clone(), val);
+    Ok(GabrValue::new(ObjectType::NULL, false))
+}
+
+pub fn eval_if_statement(env: &mut GabrEnv, if_state: &ast::IfStatement) -> Result<GabrValue, String> {
+    let condition_result = match if_state.condition.eval(env)?.gabr_type {
         ObjectType::NUMBER(res) => res != 0,
         _ => {
             return Err("If Statement evaluation error: If statement could not evaluate condition to a literal value".to_string());
         }
     };
     if condition_result {
-        if_state.then_block.eval()
+        if_state.then_block.eval(env)
     } else {
         match if_state.else_block.as_ref() {
-            Some(else_block) => else_block.eval(),
+            Some(else_block) => else_block.eval(env),
             None => Ok(GabrValue::new(ObjectType::NULL, false))
         }
     }
 }
 
-pub fn eval_return_statement(return_state: &ast::ReturnStatement) -> Result<GabrValue, String> {
+pub fn eval_return_statement(env: &mut GabrEnv, return_state: &ast::ReturnStatement) -> Result<GabrValue, String> {
     match return_state.return_value.as_ref() {
         Some(value) => {
-            let mut value = value.eval()?;
+            let mut value = value.eval(env)?;
             value.returning = true;
             Ok(value)
         },
@@ -79,12 +135,12 @@ pub fn eval_return_statement(return_state: &ast::ReturnStatement) -> Result<Gabr
     }
 }
 
-pub fn eval_infix(infix: &ast::InfixExpression) -> Result<GabrValue, String> {
-    let op1 = match infix.op1.eval()?.gabr_type {
+pub fn eval_infix(env: &mut GabrEnv, infix: &ast::InfixExpression) -> Result<GabrValue, String> {
+    let op1 = match infix.op1.eval(env)?.gabr_type {
         ObjectType::NUMBER(num) => num,
         _ => return Err("Infix Evaluation Failed: Operand 1 did not evaluate to a number".to_string())
     };
-    let op2 = match infix.op2.eval()?.gabr_type {
+    let op2 = match infix.op2.eval(env)?.gabr_type {
         ObjectType::NUMBER(num) => num,
         _ => return Err("Infix Evaluation Failed: Operand 2 did not evaluate to a number".to_string())
     };
@@ -126,6 +182,13 @@ pub fn eval_infix(infix: &ast::InfixExpression) -> Result<GabrValue, String> {
         }
     };
     Ok(GabrValue::new(ObjectType::NUMBER(val), false))
+}
+
+pub fn eval_identifier(env: &GabrEnv, ident: &ast::Identifier) -> Result<GabrValue, String> {
+    match env.get_var(ident.name.clone()) {
+        Some(val) => Ok(val.clone()),
+        None => Err("Referenced Identifier could not be found".to_string())
+    }
 }
 
 pub fn eval_number_literal(num_lit: &ast::Number) -> Result<GabrValue, String> {
