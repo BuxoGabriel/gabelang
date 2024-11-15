@@ -19,6 +19,8 @@ pub enum TOKENTYPE {
     RPAREN,
     LSQUIG,
     RSQUIG,
+    LSQR,
+    RSQR,
     LET,
     FN,
     WHILE,
@@ -122,6 +124,8 @@ impl<'a> Lexer<'a> {
                 ')' => TOKENTYPE::RPAREN,
                 '{' => TOKENTYPE::LSQUIG,
                 '}' => TOKENTYPE::RSQUIG,
+                '[' => TOKENTYPE::LSQR,
+                ']' => TOKENTYPE::RSQR,
                 _ => TOKENTYPE::ILLEGAL
             };
         }

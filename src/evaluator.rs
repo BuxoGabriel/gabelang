@@ -82,6 +82,7 @@ impl GabrValue {
 #[derive(Clone)]
 enum ObjectType {
     NUMBER(i64),
+    ARRAY(Vec<ObjectType>),
     NULL
 }
 
@@ -89,6 +90,17 @@ impl ObjectType {
     pub fn to_string(&self) -> Option<String> {
         match self {
             Self::NUMBER(val) => Some(val.to_string()),
+            Self::ARRAY(vals) => {
+                let mut output = String::from("[");
+                output.push_str(&vals.iter().map(|v| {
+                    match v.to_string() {
+                        Some(s) => s,
+                        None => "null".to_string()
+                    }
+                }).collect::<Vec<String>>().join(", "));
+                output.push(']');
+                Some(output)
+            }
             Self::NULL => None
         }
     }
@@ -96,7 +108,8 @@ impl ObjectType {
     fn is_truthy(&self) -> bool {
         match self {
             Self::NUMBER(val) => *val != 0,
-            Self::NULL => false
+            Self::NULL => false,
+            _ => true
         }
     }
 }
@@ -266,6 +279,20 @@ pub fn eval_identifier(env: &GabrEnv, ident: &ast::Identifier) -> Result<GabrVal
         Some(val) => Ok(val.clone()),
         None => Err("Referenced Identifier could not be found".to_string())
     }
+}
+
+pub fn eval_array_literal(env: &mut GabrEnv, array_lit: &ast::ArrayLiteral) -> Result<GabrValue, String> {
+    // Create an array of evaluated expressions
+    let arr: Vec<Result<GabrValue, String>> = array_lit.values.iter().map(|v| v.eval(env)).collect();
+    let mut err = Ok(());
+    arr.iter().for_each(|v| {
+        if let Err(e) = v {
+            *&mut err = Err(e);
+        }
+    });
+    err?;
+    let arr: Vec<ObjectType> = arr.into_iter().map(|v| v.unwrap().gabr_type).collect();
+    Ok(GabrValue::new(ObjectType::ARRAY(arr), false))
 }
 
 pub fn eval_number_literal(num_lit: &ast::Number) -> Result<GabrValue, String> {

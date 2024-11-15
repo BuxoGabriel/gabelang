@@ -51,14 +51,17 @@ impl Node for Program {
 }
 
 #[derive(Debug, Clone)]
-pub struct Identifier {
-    pub token: Token,
-    pub name: String,
+pub struct CodeBlock {
+    pub open_token: Token,
+    pub close_token: Token,
+    pub statements: Vec<Rc<dyn Statement>>
 }
 
-impl Node for Identifier {
+impl Node for CodeBlock {
     fn token_literal(&self) -> String {
-        self.token.literal.clone()
+        let mut literal = String::from(&self.open_token.literal);
+        literal.push_str(&self.close_token.literal);
+        literal
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -66,50 +69,25 @@ impl Node for Identifier {
     }
 
     fn to_string(&self) -> String {
-        self.name.clone()
+        let mut output = String::from("{\n");
+        for statement in self.statements.iter() {
+            output.push_str("    ");
+            output.push_str(&statement.to_string());
+        }
+        output.push_str("}\n");
+        output
     }
 
     fn eval(&self, env: &mut GabrEnv) -> Result<GabrValue, String> {
-        evaluator::eval_identifier(env, self)
+        evaluator::eval_codeblock(env, self)
     }
 }
 
-impl Expression for Identifier {
-    fn expression_node(&self) -> Box<dyn Node> {
+impl Statement for CodeBlock {
+    fn statement_node(&self) -> Box<dyn Node> {
         todo!()
     }
 }
-
-#[derive(Debug)]
-pub struct Number {
-    pub token: Token,
-    pub value: i64
-}
-
-impl Node for Number {
-    fn token_literal(&self) -> String {
-        self.token.literal.clone()
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn to_string(&self) -> String {
-        self.value.to_string()
-    }
-
-    fn eval(&self, _: &mut GabrEnv) -> Result<GabrValue, String> {
-        evaluator::eval_number_literal(self)
-    }
-}
-
-impl Expression for Number {
-    fn expression_node(&self) -> Box<dyn Node> {
-        todo!()
-    }
-}
-
 #[derive(Debug)]
 pub struct InfixExpression {
     pub token: Token,
@@ -417,9 +395,7 @@ impl Node for Function {
         output.push(' ');
         output.push_str(&self.ident.to_string());
         output.push('(');
-        for param in self.params.iter() {
-            output.push_str(&param.to_string());
-        }
+        output.push_str(&self.params.iter().map(|v| v.to_string()).collect::<Vec<String>>().join(", "));
         output.push_str(") ");
         output.push_str(&self.body.to_string());
         output
@@ -454,10 +430,7 @@ impl Node for FunctionCall {
     fn to_string(&self) -> String {
         let mut output = self.token_literal();
         output.push('(');
-        for param in self.params.iter() {
-            output.push_str(&param.to_string());
-            output.push_str(", ");
-        }
+        output.push_str(&self.params.iter().map(|v| v.to_string()).collect::<Vec<String>>().join(", "));
         output.push(')');
         output
     }
@@ -474,17 +447,14 @@ impl Expression for FunctionCall {
 }
 
 #[derive(Debug, Clone)]
-pub struct CodeBlock {
-    pub open_token: Token,
-    pub close_token: Token,
-    pub statements: Vec<Rc<dyn Statement>>
+pub struct Identifier {
+    pub token: Token,
+    pub name: String,
 }
 
-impl Node for CodeBlock {
+impl Node for Identifier {
     fn token_literal(&self) -> String {
-        let mut literal = String::from(&self.open_token.literal);
-        literal.push_str(&self.close_token.literal);
-        literal
+        self.token.literal.clone()
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -492,22 +462,80 @@ impl Node for CodeBlock {
     }
 
     fn to_string(&self) -> String {
-        let mut output = String::from("{\n");
-        for statement in self.statements.iter() {
-            output.push_str("    ");
-            output.push_str(&statement.to_string());
-        }
-        output.push_str("}\n");
+        self.name.clone()
+    }
+
+    fn eval(&self, env: &mut GabrEnv) -> Result<GabrValue, String> {
+        evaluator::eval_identifier(env, self)
+    }
+}
+
+impl Expression for Identifier {
+    fn expression_node(&self) -> Box<dyn Node> {
+        todo!()
+    }
+}
+
+#[derive(Debug)]
+pub struct ArrayLiteral {
+    pub open_token: Token,
+    pub close_token: Token,
+    pub values: Vec<Box<dyn Expression>>
+}
+
+impl Node for ArrayLiteral {
+    fn token_literal(&self) -> String {
+        self.open_token.literal.clone()
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn to_string(&self) -> String {
+        let mut output = self.open_token.literal.clone();
+        output.push_str(&self.values.iter().map(|v| v.to_string()).collect::<Vec<String>>().join(", "));
+        output.push_str(&self.close_token.literal.clone());
         output
     }
 
     fn eval(&self, env: &mut GabrEnv) -> Result<GabrValue, String> {
-        evaluator::eval_codeblock(env, self)
+        evaluator::eval_array_literal(env, self)
     }
 }
 
-impl Statement for CodeBlock {
-    fn statement_node(&self) -> Box<dyn Node> {
+impl Expression for ArrayLiteral {
+    fn expression_node(&self) -> Box<dyn Node> {
+        todo!()
+    }
+}
+
+#[derive(Debug)]
+pub struct Number {
+    pub token: Token,
+    pub value: i64
+}
+
+impl Node for Number {
+    fn token_literal(&self) -> String {
+        self.token.literal.clone()
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn to_string(&self) -> String {
+        self.value.to_string()
+    }
+
+    fn eval(&self, _: &mut GabrEnv) -> Result<GabrValue, String> {
+        evaluator::eval_number_literal(self)
+    }
+}
+
+impl Expression for Number {
+    fn expression_node(&self) -> Box<dyn Node> {
         todo!()
     }
 }

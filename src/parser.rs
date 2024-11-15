@@ -92,10 +92,6 @@ impl<'a> Parser<'a> {
 
     fn parse_expression_statement(&mut self) -> Result<Rc<ast::ExpressionStatement>, String> {
         let expression = Box::from(self.parse_expression(0)?);
-        if !self.current_token_is(TOKENTYPE::SEMICOLON) {
-            return Err("Invalid Expression Statement: Expression statement should end with a semicolon".to_string())
-        }
-        self.next_token();
         Ok(Rc::from(ast::ExpressionStatement {
             expression
         }))
@@ -307,6 +303,10 @@ impl<'a> Parser<'a> {
         if self.current_token_is(TOKENTYPE::LPAREN) {
             return Ok(self.parse_group_expression()?)
         }
+        // Return array literal if expression starts with an open square bracket
+        if self.current_token_is(TOKENTYPE::LSQR) {
+            return Ok(self.parse_array_literal()?)
+        }
         if !self.current_token_is(TOKENTYPE::NUMBER) && !self.current_token_is(TOKENTYPE::IDENTIFIER) {
             return Err(format!("Invalid Expression: Expression must start with a literal or variable, started with: {:?}", self.current_token));
         }
@@ -376,12 +376,39 @@ impl<'a> Parser<'a> {
         }
     }
 
+    // Precondition: Caller must check that current_token is an LSQR
+    fn parse_array_literal(&mut self) -> Result<Box<ast::ArrayLiteral>, String> {
+        // Assert that the current token is a LSQR
+        assert!(self.current_token_is(TOKENTYPE::LSQR));
+        let open_token = self.current_token.take().unwrap();
+        // Advance parser to array items
+        self.next_token();
+        let mut values = Vec::new();
+        while self.current_token.is_some() && !self.current_token_is(TOKENTYPE::RSQR) {
+            values.push(self.parse_expression(0)?);
+            if self.current_token_is(TOKENTYPE::COMMA) {
+                self.next_token();
+            } else {
+                break
+            }
+        }
+        if !self.current_token_is(TOKENTYPE::RSQR) {
+            return Err("Invalid array literal: Expected array literal to end with a \"]\"".to_string());
+        }
+        let close_token = self.current_token.take().unwrap();
+        self.next_token();
+        Ok(Box::from(ast::ArrayLiteral {
+            open_token,
+            close_token,
+            values
+        }))
+    }
+
     // Precondition: Caller must check that current_token is a number
     fn parse_number(&mut self) -> Result<Box<ast::Number>, String> {
         // Assert that the current token is a number
-        assert_eq!(self.current_token.is_none(), false);
+        assert!(self.current_token_is(TOKENTYPE::NUMBER));
         let number_token = self.current_token.take().unwrap();
-        assert_eq!(number_token.token_type, TOKENTYPE::NUMBER);
         // Advance parser to next token
         self.next_token();
         // Create and return number Expression
