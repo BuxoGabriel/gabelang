@@ -1,4 +1,4 @@
-use std::{fs, error::Error};
+use std::{collections::HashMap, error::Error, fs};
 
 pub mod repl;
 mod lexer;
@@ -6,30 +6,56 @@ mod ast;
 mod parser;
 mod evaluator;
 
+use evaluator::GabrEnv;
 use parser::Parser;
 use ast::Node;
 
 pub struct Config {
-    file_name: String
+    flags: HashMap<String, String>
 }
 
 impl Config {
     pub fn build(args: &[String]) -> Result<Config, &'static str> {
-        if args.len() != 2 {
-            return Err("must supply a file as an argument");
-        }
-        let file_name = args[1].clone();
-        Ok(Config { file_name })
+        let flags = Self::parse_flags(args);
+        Ok(Config { flags })
+    }
+
+    fn parse_flags(args: &[String]) -> HashMap<String, String> {
+        let mut map = HashMap::<String, String>::new();
+        args.windows(2).for_each(|pair| {
+            match pair[0].clone().split_once("--") {
+                Some((_, flag)) => {
+                    map.insert(flag.to_string(), pair[1].clone());
+                },
+                None => {},
+            }
+        });
+        map
+    }
+
+    fn get_flag(&self, flag: &str) -> Option<String> {
+        self.flags.get(flag).map(|f| f.clone())
     }
 }
 
 pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
-    let contents = fs::read_to_string(&config.file_name)?;
-    println!("lexing contents of {}", &config.file_name);
-    let program = Parser::new(&contents).parse_program();
-    match program {
-        Ok(program) => println!("{}", program.to_string()),
-        Err(e) => println!("{e}"),
-    };
+    if let Some(file_name) = config.get_flag("file") {
+        let contents = fs::read_to_string(&file_name)?;
+        println!("parsing {}", &file_name);
+        let program = Parser::new(&contents).parse_program();
+        match program {
+            Ok(program) => {
+                println!("parsing complete! Running {}", &file_name);
+                let mut env = GabrEnv::new();
+                let res = program.eval(&mut env)?;
+                if let Some(res) =  res.to_string() {
+                    println!("{res}");
+                }
+            },
+            Err(e) => println!("{e}"),
+        };
+        return Ok(())
+    }
+    repl::start();
     Ok(())
 }

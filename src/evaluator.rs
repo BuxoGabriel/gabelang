@@ -252,7 +252,3 @@ pub fn eval_identifier(env: &GabrEnv, ident: &ast::Identifier) -> Result<GabrVal
 pub fn eval_number_literal(num_lit: &ast::Number) -> Result<GabrValue, String> {
     Ok(GabrValue::new(ObjectType::NUMBER(num_lit.value), false))
 }
-
-pub fn eval_not_implemented() -> Result<GabrValue, String> {
-    Err("Evaluation not yet implemented".to_string())
-}
