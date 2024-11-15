@@ -253,6 +253,74 @@ impl Statement for LetStatement {
 }
 
 #[derive(Debug)]
+pub struct AssignStatement {
+    pub ident: Identifier,
+    pub expression: Box<dyn Expression>
+}
+
+impl Node for AssignStatement {
+    fn token_literal(&self) -> String {
+        self.ident.token_literal()
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn to_string(&self) -> String {
+        let mut output = self.ident.to_string();
+        output.push_str(" = ");
+        output.push_str(&self.expression.to_string());
+        output
+    }
+
+    fn eval(&self, env: &mut GabrEnv) -> Result<GabrValue, String> {
+        evaluator::eval_assign_statement(env, self)
+    }
+}
+
+impl Statement for AssignStatement {
+    fn statement_node(&self) -> Box<dyn Node> {
+        todo!();
+    }
+}
+
+#[derive(Debug)]
+pub struct WhileLoop {
+    pub token: Token,
+    pub condition: Box<dyn Expression>,
+    pub body: CodeBlock
+}
+
+impl Node for WhileLoop {
+    fn token_literal(&self) -> String {
+        self.token.literal.clone()
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn to_string(&self) -> String {
+        let mut output = self.token_literal();
+        output.push_str(&self.condition.to_string());
+        output.push(' ');
+        output.push_str(&self.body.to_string());
+        output
+    }
+
+    fn eval(&self, env: &mut GabrEnv) -> Result<GabrValue, String> {
+        evaluator::eval_while_loop(env, self)
+    }
+}
+
+impl Statement for WhileLoop {
+    fn statement_node(&self) -> Box<dyn Node> {
+        todo!()
+    }
+}
+
+#[derive(Debug)]
 pub struct IfStatement {
     pub token: Token,
     pub condition: Box<dyn Expression>,

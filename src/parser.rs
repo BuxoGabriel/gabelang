@@ -75,18 +75,31 @@ impl<'a> Parser<'a> {
     fn parse_statement(&mut self) -> Result<Rc<dyn ast::Statement>, String> {
         match self.current_token.as_ref().unwrap().token_type {
             TOKENTYPE::LET => Ok(self.parse_let_statement()?),
+            TOKENTYPE::IDENTIFIER => {
+                if self.peek_token_is(TOKENTYPE::EQUAL) {
+                    Ok(self.parse_assign_statement()?)
+                } else {
+                    Ok(self.parse_expression_statement()?)
+                }
+            },
+            TOKENTYPE::WHILE => Ok(self.parse_while_loop()?),
             TOKENTYPE::IF => Ok(self.parse_if_statement()?),
             TOKENTYPE::RETURN => Ok(self.parse_return_statement()?),
             TOKENTYPE::FN => Ok(self.parse_function()?),
-            _ => {
-                let expression = Box::from(self.parse_expression(0)?);
-                Ok(Rc::from(ast::ExpressionStatement {
-                    expression
-                }))
-            }
+            _ => Ok(self.parse_expression_statement()?)
         }
     }
 
+    fn parse_expression_statement(&mut self) -> Result<Rc<ast::ExpressionStatement>, String> {
+        let expression = Box::from(self.parse_expression(0)?);
+        if !self.current_token_is(TOKENTYPE::SEMICOLON) {
+            return Err("Invalid Expression Statement: Expression statement should end with a semicolon".to_string())
+        }
+        self.next_token();
+        Ok(Rc::from(ast::ExpressionStatement {
+            expression
+        }))
+    }
     // Precondition: caller must check that current token is a let token
     fn parse_let_statement(&mut self) -> Result<Rc<ast::LetStatement>, String> {
         // Assert that the current token is a let token
@@ -124,13 +137,50 @@ impl<'a> Parser<'a> {
         }))
     }
 
+    // Precondition: caller must ensure that current token is an identifier token
+    fn parse_assign_statement(&mut self) -> Result<Rc<ast::AssignStatement>, String> {
+        // Assert that current token is identifier
+        assert!(self.current_token_is(TOKENTYPE::IDENTIFIER));
+        // If no token after identifier or token after identifier is not an equal sign it is an invalid assignment statement
+        if !self.peek_token_is(TOKENTYPE::EQUAL) {
+            return Err(String::from("variable assignment must have a \"=\" after variable name"));
+        }
+        let ident = self.parse_identifier();
+        // Move on to expression
+        self.next_token();
+        let expression = self.parse_expression(0)?;
+        if !self.current_token_is(TOKENTYPE::SEMICOLON) {
+            return Err(String::from("Variable assignment must end with a semicolon"));
+        } else {
+            self.next_token();
+        }
+        Ok(Rc::from(ast::AssignStatement {
+            ident,
+            expression
+        }))
+    }
+
+    // Precondition: Caller must only call this if the current token is a while token
+    fn parse_while_loop(&mut self) -> Result<Rc<ast::WhileLoop>, String> {
+        // Assert that the current token is a while token
+        assert!(self.current_token_is(TOKENTYPE::WHILE));
+        let token: Token = self.current_token.take().unwrap();
+        // Advance to expression to validate
+        self.next_token();
+        let condition = self.parse_expression(0)?;
+        let body = self.parse_block()?;
+        Ok(Rc::from(ast::WhileLoop {
+            token,
+            condition,
+            body
+        }))
+    }
+
     // Precondition: Caller must only call this if the current token is an if token
     fn parse_if_statement(&mut self) -> Result<Rc<ast::IfStatement>, String> {
         // Assert that the current token is an if token
-        // Todo: compiler macro to remove asserts when building for production
-        assert_eq!(self.current_token.is_none(), false);
+        assert!(self.current_token_is(TOKENTYPE::IF));
         let if_token: Token = self.current_token.take().unwrap();
-        assert_eq!(if_token.token_type, TOKENTYPE::IF);
         // Advance to expression to validate
         self.next_token();
         let condition = self.parse_expression(0)?;

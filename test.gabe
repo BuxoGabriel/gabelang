@@ -4,7 +4,15 @@ fn add_one(i) {
 
 let i = 10;
 
-if i * 2 + (3 - i) {
-    let b = i * add_one(2);
-    return b - 1;
+let b = 0;
+
+while i {
+    if i * 2 + (3 - i) {
+        b = i * add_one(2);
+    } else {
+        return 1;
+    }
+    i = i - 1;
 }
+
+b;

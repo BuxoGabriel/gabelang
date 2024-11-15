@@ -88,8 +88,15 @@ enum ObjectType {
 impl ObjectType {
     pub fn to_string(&self) -> Option<String> {
         match self {
-            Self::NUMBER(num) => Some(num.to_string()),
+            Self::NUMBER(val) => Some(val.to_string()),
             Self::NULL => None
+        }
+    }
+
+    fn is_truthy(&self) -> bool {
+        match self {
+            Self::NUMBER(val) => *val != 0,
+            Self::NULL => false
         }
     }
 }
@@ -124,19 +131,31 @@ pub fn eval_function(env: &mut GabrEnv, func: &ast::Function) -> Result<GabrValu
     Ok(GabrValue::new(ObjectType::NULL, false))
 }
 
+pub fn eval_while_loop(env: &mut GabrEnv, while_loop: &ast::WhileLoop) -> Result<GabrValue, String> {
+    let mut result = GabrValue::new(ObjectType::NULL, false);
+    while while_loop.condition.eval(env)?.gabr_type.is_truthy() {
+        result = while_loop.body.eval(env)?;
+        if result.returning {
+            return Ok(result)
+        }
+    }
+    Ok(result)
+}
+
 pub fn eval_let_statement(env: &mut GabrEnv, let_state: &ast::LetStatement) -> Result<GabrValue, String> {
     let val = let_state.expression.eval(env)?;
     env.create_var(let_state.identifier.name.clone(), val);
     Ok(GabrValue::new(ObjectType::NULL, false))
 }
 
+pub fn eval_assign_statement(env: &mut GabrEnv, set_state: &ast::AssignStatement) -> Result<GabrValue, String> {
+    let val = set_state.expression.eval(env)?;
+    env.set_var(set_state.ident.name.clone(), val)?;
+    Ok(GabrValue::new(ObjectType::NULL, false))
+}
+
 pub fn eval_if_statement(env: &mut GabrEnv, if_state: &ast::IfStatement) -> Result<GabrValue, String> {
-    let condition_result = match if_state.condition.eval(env)?.gabr_type {
-        ObjectType::NUMBER(res) => res != 0,
-        _ => {
-            return Err("If Statement evaluation error: If statement could not evaluate condition to a literal value".to_string());
-        }
-    };
+    let condition_result = if_state.condition.eval(env)?.gabr_type.is_truthy();
     if condition_result {
         if_state.then_block.eval(env)
     } else {
