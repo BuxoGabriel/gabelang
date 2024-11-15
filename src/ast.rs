@@ -1,5 +1,6 @@
 use std::fmt::Debug;
 use std::any::Any;
+use std::rc::Rc;
 
 use crate::evaluator::{self, GabrEnv, GabrValue};
 use crate::lexer::Token;
@@ -21,7 +22,7 @@ pub trait Expression : Node + Debug {
 
 #[derive(Debug)]
 pub struct Program {
-    pub statements: Vec<Box<dyn Statement>>,
+    pub statements: Vec<Rc<dyn Statement>>,
 }
 
 impl Node for Program {
@@ -49,7 +50,7 @@ impl Node for Program {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Identifier {
     pub token: Token,
     pub name: String,
@@ -326,7 +327,7 @@ impl Statement for ReturnStatement {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Function {
     pub token: Token,
     pub ident: Identifier,
@@ -356,8 +357,8 @@ impl Node for Function {
         output
     }
 
-    fn eval(&self, _: &mut GabrEnv) -> Result<GabrValue, String> {
-        evaluator::eval_not_implemented()
+    fn eval(&self, env: &mut GabrEnv) -> Result<GabrValue, String> {
+        evaluator::eval_function(env, self)
     }
 }
 
@@ -369,13 +370,13 @@ impl Statement for Function {
 
 #[derive(Debug)]
 pub struct FunctionCall {
-    pub name: Identifier,
+    pub ident: Identifier,
     pub params: Vec<Box<dyn Expression>>
 }
 
 impl Node for FunctionCall {
     fn token_literal(&self) -> String {
-        self.name.token_literal()
+        self.ident.token_literal()
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -394,7 +395,7 @@ impl Node for FunctionCall {
     }
 
     fn eval(&self, env: &mut GabrEnv) -> Result<GabrValue, String> {
-        evaluator::eval_not_implemented()
+        evaluator::eval_function_call(env, self)
     }
 }
 
@@ -404,11 +405,11 @@ impl Expression for FunctionCall {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CodeBlock {
     pub open_token: Token,
     pub close_token: Token,
-    pub statements: Vec<Box<dyn Statement>>
+    pub statements: Vec<Rc<dyn Statement>>
 }
 
 impl Node for CodeBlock {

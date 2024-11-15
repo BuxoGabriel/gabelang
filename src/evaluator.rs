@@ -3,22 +3,38 @@ use std::collections::HashMap;
 use crate::ast::{self, Node};
 
 pub struct GabrEnv {
-    scopes: Vec<HashMap<String, GabrValue>>
+    var_scopes: Vec<HashMap<String, GabrValue>>,
+    func_scopes: Vec<HashMap<String, ast::Function>>
 }
 
 impl GabrEnv {
     pub fn new() -> Self {
-        let scopes = vec![HashMap::new()];
-        Self { scopes }
+        let var_scopes = vec![HashMap::new()];
+        let func_scopes = vec![HashMap::new()];
+        Self { var_scopes, func_scopes }
+    }
+
+    fn create_func(&mut self, name: String, val: ast::Function) {
+        let scope = self.func_scopes.last_mut().expect("Tried to create function but no scopes are available in environment");
+        scope.insert(name, val);
+    }
+
+    fn get_func(&self, name: String) -> Option<ast::Function> {
+        for scope in self.func_scopes.iter().rev() {
+            if let Some(val) = scope.get(&name) {
+                return Some(val.clone());
+            }
+        }
+        None
     }
 
     fn create_var(&mut self, name: String, val: GabrValue) {
-        let scope = self.scopes.last_mut().expect("Tried to create variable but no scopes are available in environment");
+        let scope = self.var_scopes.last_mut().expect("Tried to create variable but no scopes are available in environment");
         scope.insert(name, val);
     }
 
     fn set_var(&mut self, name: String, val: GabrValue) -> Result<(),String> {
-        for scope in self.scopes.iter_mut().rev() {
+        for scope in self.var_scopes.iter_mut().rev() {
             if scope.contains_key(&name) {
                 scope.insert(name.clone(), val);
                 return Ok(())
@@ -28,7 +44,7 @@ impl GabrEnv {
     }
 
     fn get_var(&self, name: String) -> Option<&GabrValue> {
-        for scope in self.scopes.iter().rev() {
+        for scope in self.var_scopes.iter().rev() {
             if let Some(val) = scope.get(&name) {
                 return Some(val);
             }
@@ -37,11 +53,13 @@ impl GabrEnv {
     }
 
     fn push_scope(&mut self) {
-        self.scopes.push(HashMap::new());
+        self.var_scopes.push(HashMap::new());
+        self.func_scopes.push(HashMap::new());
     }
 
     fn pop_scope(&mut self) {
-        self.scopes.pop();
+        self.var_scopes.pop();
+        self.func_scopes.pop();
     }
 }
 
@@ -99,6 +117,11 @@ pub fn eval_codeblock(env: &mut GabrEnv, block: &ast::CodeBlock) -> Result<GabrV
     }
     env.pop_scope();
     Ok(result)
+}
+
+pub fn eval_function(env: &mut GabrEnv, func: &ast::Function) -> Result<GabrValue, String> {
+    env.create_func(func.ident.name.clone(), func.clone());
+    Ok(GabrValue::new(ObjectType::NULL, false))
 }
 
 pub fn eval_let_statement(env: &mut GabrEnv, let_state: &ast::LetStatement) -> Result<GabrValue, String> {
@@ -182,6 +205,39 @@ pub fn eval_infix(env: &mut GabrEnv, infix: &ast::InfixExpression) -> Result<Gab
         }
     };
     Ok(GabrValue::new(ObjectType::NUMBER(val), false))
+}
+
+pub fn eval_function_call(env: &mut GabrEnv, func_call: &ast::FunctionCall) -> Result<GabrValue, String> {
+    let func_name = func_call.ident.name.clone();
+    let func = match env.get_func(func_name) {
+        Some(func) => func,
+        None => {
+            return Err("Referenced Identifier could not be found".to_string());
+        }
+    };
+    // Create new scope for parameters
+    env.push_scope();
+    // Add every parameter to new scope
+    let params: Vec<(String, Result<GabrValue, String>)> = func.params.iter()
+        .map(|param| param.name.clone())
+        .zip(func_call.params.iter().map(|param| param.eval(env)))
+        .collect();
+    let mut err = Ok(());
+    params.iter().for_each(|(name, val)| {
+        match val {
+            Ok(val) => env.create_var(name.clone(), val.clone()),
+            Err(e) => err = Err(e),
+        }
+    });
+    // If there was a problem evaluating a parameter return its error
+    err?;
+    // Evaluate the body of the function with the new context
+    let mut result = func.body.eval(env)?;
+    // Remove param variables scope
+    env.pop_scope();
+    // Function call should not automatically be interpretted as return funcCall(param);
+    result.returning = false;
+    Ok(result)
 }
 
 pub fn eval_identifier(env: &GabrEnv, ident: &ast::Identifier) -> Result<GabrValue, String> {

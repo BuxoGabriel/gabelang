@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use crate::{ast, lexer::{Lexer, Token, TOKENTYPE}};
 
 pub struct Parser<'a> {
@@ -32,7 +34,7 @@ impl<'a> Parser<'a> {
     pub fn parse_program(&mut self) -> Result<ast::Program, String> {
         self.next_token();
         self.next_token();
-        let mut statements: Vec<Box<dyn ast::Statement>> = Vec::new();
+        let mut statements: Vec<Rc<dyn ast::Statement>> = Vec::new();
         while self.current_token.as_ref().is_some() {
             statements.push(self.parse_statement()?);
         }
@@ -70,7 +72,7 @@ impl<'a> Parser<'a> {
     }
 
 
-    fn parse_statement(&mut self) -> Result<Box<dyn ast::Statement>, String> {
+    fn parse_statement(&mut self) -> Result<Rc<dyn ast::Statement>, String> {
         match self.current_token.as_ref().unwrap().token_type {
             TOKENTYPE::LET => Ok(self.parse_let_statement()?),
             TOKENTYPE::IF => Ok(self.parse_if_statement()?),
@@ -78,7 +80,7 @@ impl<'a> Parser<'a> {
             TOKENTYPE::FN => Ok(self.parse_function()?),
             _ => {
                 let expression = Box::from(self.parse_expression(0)?);
-                Ok(Box::from(ast::ExpressionStatement {
+                Ok(Rc::from(ast::ExpressionStatement {
                     expression
                 }))
             }
@@ -86,7 +88,7 @@ impl<'a> Parser<'a> {
     }
 
     // Precondition: caller must check that current token is a let token
-    fn parse_let_statement(&mut self) -> Result<Box<ast::LetStatement>, String> {
+    fn parse_let_statement(&mut self) -> Result<Rc<ast::LetStatement>, String> {
         // Assert that the current token is a let token
         // Todo: compiler macro to remove asserts when building for production
         assert_eq!(self.current_token.is_none(), false);
@@ -115,7 +117,7 @@ impl<'a> Parser<'a> {
         } else {
             self.next_token();
         }
-        Ok(Box::from(ast::LetStatement {
+        Ok(Rc::from(ast::LetStatement {
             identifier,
             token: let_token,
             expression
@@ -123,7 +125,7 @@ impl<'a> Parser<'a> {
     }
 
     // Precondition: Caller must only call this if the current token is an if token
-    fn parse_if_statement(&mut self) -> Result<Box<ast::IfStatement>, String> {
+    fn parse_if_statement(&mut self) -> Result<Rc<ast::IfStatement>, String> {
         // Assert that the current token is an if token
         // Todo: compiler macro to remove asserts when building for production
         assert_eq!(self.current_token.is_none(), false);
@@ -139,7 +141,7 @@ impl<'a> Parser<'a> {
         } else {
             None
         };
-        Ok(Box::from(ast::IfStatement {
+        Ok(Rc::from(ast::IfStatement {
             token: if_token,
             condition,
             then_block,
@@ -148,7 +150,7 @@ impl<'a> Parser<'a> {
     }
 
     // Precondition: Caller must only call this if the current token is a return token
-    fn parse_return_statement(&mut self) -> Result<Box<ast::ReturnStatement>, String> {
+    fn parse_return_statement(&mut self) -> Result<Rc<ast::ReturnStatement>, String> {
         assert!(self.current_token_is(TOKENTYPE::RETURN));
         let token = self.current_token.take().unwrap();
         self.next_token();
@@ -165,14 +167,14 @@ impl<'a> Parser<'a> {
         } else {
             self.next_token();
         }
-        Ok(Box::from(ast::ReturnStatement {
+        Ok(Rc::from(ast::ReturnStatement {
             token,
             return_value
         }))
     }
 
     // Precondition: Caller must only call this if the current token is an if token
-    fn parse_function(&mut self) -> Result<Box<ast::Function>, String> {
+    fn parse_function(&mut self) -> Result<Rc<ast::Function>, String> {
         // Ensure parse function was not called while token is not fn
         assert!(self.current_token.is_some());
         assert_eq!(self.current_token.as_ref().unwrap().token_type, TOKENTYPE::FN);
@@ -191,14 +193,7 @@ impl<'a> Parser<'a> {
         // Move on to parameters
         self.next_token();
         let mut params = Vec::new();
-        while self.current_token.is_some() {
-            if self.current_token_is(TOKENTYPE::RPAREN) {
-                self.next_token();
-                break;
-            }
-            if !self.current_token_is(TOKENTYPE::IDENTIFIER){
-                return Err("Invalid function: Invalid function parameter".to_string());
-            }
+        while self.current_token_is(TOKENTYPE::IDENTIFIER) {
             params.push(self.parse_identifier());
             if self.current_token_is(TOKENTYPE::COMMA) {
                 self.next_token()
@@ -206,12 +201,16 @@ impl<'a> Parser<'a> {
                 break
             }
         }
+        if !self.current_token_is(TOKENTYPE::RPAREN) {
+            return Err(format!("Invalid function: Invalid function parameter or function closed improperly, found token: {:?}", self.current_token));
+        }
         // Move on to then block
-        if self.current_token.is_none() || self.current_token.as_ref().unwrap().token_type != TOKENTYPE::LSQUIG {
+        self.next_token();
+        if !self.current_token_is(TOKENTYPE::LSQUIG) {
             return Err("Invalid function: Expected code block after parameters".to_string());
         }
         let body = self.parse_block()?;
-        Ok(Box::from(ast::Function {
+        Ok(Rc::from(ast::Function {
             token,
             ident,
             params,
@@ -224,10 +223,12 @@ impl<'a> Parser<'a> {
     fn parse_function_call(&mut self) -> Result<ast::FunctionCall, String> {
         assert!(self.current_token_is(TOKENTYPE::IDENTIFIER));
         // Get function Identifier
-        let name = self.parse_identifier();
+        let ident = self.parse_identifier();
         assert!(self.current_token_is(TOKENTYPE::LPAREN));
+        // Move on to parameters
+        self.next_token();
         let mut params: Vec<Box<dyn ast::Expression>> = Vec::new();
-        while self.current_token_is(TOKENTYPE::IDENTIFIER) {
+        while self.current_token.is_some() && !self.current_token_is(TOKENTYPE::RPAREN) {
             params.push(self.parse_expression(0)?);
             if self.current_token_is(TOKENTYPE::COMMA) {
                 self.next_token()
@@ -235,15 +236,14 @@ impl<'a> Parser<'a> {
                 break
             }
         }
-        // Param list should end with a close parenthesis otherwise it is an invalid
-        // function call
+        // Param list should end with a close parenthesis otherwise it is an invalid function call
         if self.current_token_is(TOKENTYPE::RPAREN) {
             self.next_token();
         } else {
-            return Err("Invalid Function Call: Function call must end parameter list with a close parenthesis".to_string());
+            return Err(format!("Invalid Function Call: Function call must end parameter list with a close parenthesis, ends with: {:?}", self.current_token));
         }
         Ok(ast::FunctionCall {
-            name,
+            ident,
             params
         })
     }

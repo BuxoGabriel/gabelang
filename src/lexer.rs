@@ -31,7 +31,7 @@ pub enum TOKENTYPE {
     ILLEGAL
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Token {
     pub token_type: TOKENTYPE,
     pub literal: String
