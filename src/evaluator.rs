@@ -208,11 +208,13 @@ pub fn eval_infix(env: &mut GabrEnv, infix: &ast::InfixExpression) -> Result<Gab
 }
 
 pub fn eval_function_call(env: &mut GabrEnv, func_call: &ast::FunctionCall) -> Result<GabrValue, String> {
+    // Get name of function
     let func_name = func_call.ident.name.clone();
-    let func = match env.get_func(func_name) {
+    // look in all scopes for a function that matches function name
+    let func = match env.get_func(func_name.clone()) {
         Some(func) => func,
         None => {
-            return Err("Referenced Identifier could not be found".to_string());
+            return Err(format!("Function \"{}\" could not be found", func_name));
         }
     };
     // Create new scope for parameters
