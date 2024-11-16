@@ -4,25 +4,30 @@ use crate::ast::{self, Node};
 
 pub struct GabrEnv {
     var_scopes: Vec<HashMap<String, GabrValue>>,
-    func_scopes: Vec<HashMap<String, ast::Function>>
 }
 
 impl GabrEnv {
     pub fn new() -> Self {
         let var_scopes = vec![HashMap::new()];
-        let func_scopes = vec![HashMap::new()];
-        Self { var_scopes, func_scopes }
+        Self { var_scopes }
     }
 
     fn create_func(&mut self, name: String, val: ast::Function) {
-        let scope = self.func_scopes.last_mut().expect("Tried to create function but no scopes are available in environment");
-        scope.insert(name, val);
+        let scope = self.var_scopes.last_mut().expect("Tried to create function but no scopes are available in environment");
+        scope.insert(name, GabrValue::new(ObjectType::FUNCTION(val), false));
     }
 
     fn get_func(&self, name: String) -> Option<ast::Function> {
-        for scope in self.func_scopes.iter().rev() {
+        for scope in self.var_scopes.iter().rev() {
             if let Some(val) = scope.get(&name) {
-                return Some(val.clone());
+                match val.gabr_object.clone() {
+                    ObjectType::FUNCTION(func) => {
+                        return Some(func);
+                    },
+                    _ => {
+                        return None;
+                    }
+                }
             }
         }
         None
@@ -54,28 +59,26 @@ impl GabrEnv {
 
     fn push_scope(&mut self) {
         self.var_scopes.push(HashMap::new());
-        self.func_scopes.push(HashMap::new());
     }
 
     fn pop_scope(&mut self) {
         self.var_scopes.pop();
-        self.func_scopes.pop();
     }
 }
 
 #[derive(Clone)]
 pub struct GabrValue {
-    gabr_type: ObjectType,
+    gabr_object: ObjectType,
     returning: bool,
 }
 
 impl GabrValue {
-    fn new(gabr_type: ObjectType, returning: bool) -> Self {
-        Self { gabr_type, returning }
+    fn new(gabr_object: ObjectType, returning: bool) -> Self {
+        Self { gabr_object, returning }
     }
 
     pub fn to_string(&self) -> Option<String> {
-        self.gabr_type.to_string()
+        self.gabr_object.to_string()
     }
 }
 
@@ -83,6 +86,7 @@ impl GabrValue {
 enum ObjectType {
     NUMBER(i64),
     ARRAY(Vec<ObjectType>),
+    FUNCTION(ast::Function),
     NULL
 }
 
@@ -101,6 +105,9 @@ impl ObjectType {
                 output.push(']');
                 Some(output)
             }
+            Self::FUNCTION(func) => {
+                Some(format!("(Function: {})", func.ident.name))
+            },
             Self::NULL => None
         }
     }
@@ -146,7 +153,7 @@ pub fn eval_function(env: &mut GabrEnv, func: &ast::Function) -> Result<GabrValu
 
 pub fn eval_while_loop(env: &mut GabrEnv, while_loop: &ast::WhileLoop) -> Result<GabrValue, String> {
     let mut result = GabrValue::new(ObjectType::NULL, false);
-    while while_loop.condition.eval(env)?.gabr_type.is_truthy() {
+    while while_loop.condition.eval(env)?.gabr_object.is_truthy() {
         result = while_loop.body.eval(env)?;
         if result.returning {
             return Ok(result)
@@ -168,7 +175,7 @@ pub fn eval_assign_statement(env: &mut GabrEnv, set_state: &ast::AssignStatement
 }
 
 pub fn eval_if_statement(env: &mut GabrEnv, if_state: &ast::IfStatement) -> Result<GabrValue, String> {
-    let condition_result = if_state.condition.eval(env)?.gabr_type.is_truthy();
+    let condition_result = if_state.condition.eval(env)?.gabr_object.is_truthy();
     if condition_result {
         if_state.then_block.eval(env)
     } else {
@@ -191,11 +198,11 @@ pub fn eval_return_statement(env: &mut GabrEnv, return_state: &ast::ReturnStatem
 }
 
 pub fn eval_infix(env: &mut GabrEnv, infix: &ast::InfixExpression) -> Result<GabrValue, String> {
-    let op1 = match infix.op1.eval(env)?.gabr_type {
+    let op1 = match infix.op1.eval(env)?.gabr_object {
         ObjectType::NUMBER(num) => num,
         _ => return Err("Infix Evaluation Failed: Operand 1 did not evaluate to a number".to_string())
     };
-    let op2 = match infix.op2.eval(env)?.gabr_type {
+    let op2 = match infix.op2.eval(env)?.gabr_object {
         ObjectType::NUMBER(num) => num,
         _ => return Err("Infix Evaluation Failed: Operand 2 did not evaluate to a number".to_string())
     };
@@ -291,8 +298,32 @@ pub fn eval_array_literal(env: &mut GabrEnv, array_lit: &ast::ArrayLiteral) -> R
         }
     });
     err?;
-    let arr: Vec<ObjectType> = arr.into_iter().map(|v| v.unwrap().gabr_type).collect();
+    let arr: Vec<ObjectType> = arr.into_iter().map(|v| v.unwrap().gabr_object).collect();
     Ok(GabrValue::new(ObjectType::ARRAY(arr), false))
+}
+
+pub fn eval_array_index(env: &mut GabrEnv, array_index: &ast::ArrayIndex) -> Result<GabrValue, String> {
+    let arr = match env.get_var(array_index.ident.name.clone()) {
+        Some(arr) => arr,
+        None => {
+            return Err(format!("Array \"{}\" could not be found", array_index.ident.name));
+        }
+    };
+    if let ObjectType::ARRAY(vals) = arr.gabr_object.clone() {
+        let index = array_index.index.eval(env)?;
+        let index = match index.gabr_object {
+            ObjectType::NUMBER(val) => val,
+            _ => {
+                return Err("Can not index array by non integer value".to_string())
+            }
+        };
+        match vals.get(index as usize) {
+            Some(val) => Ok(GabrValue::new(val.clone(), false)),
+            None => Ok(GabrValue::new(ObjectType::NULL, false)),
+        }
+    } else {
+        Err(format!("Variable \"{}\" is not an array and can not be indexed as such", array_index.ident.name))
+    }
 }
 
 pub fn eval_number_literal(num_lit: &ast::Number) -> Result<GabrValue, String> {

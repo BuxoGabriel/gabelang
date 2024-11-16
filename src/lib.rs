@@ -1,6 +1,6 @@
 use std::{collections::HashMap, error::Error, fs};
 
-pub mod repl;
+mod repl;
 mod lexer;
 mod ast;
 mod parser;

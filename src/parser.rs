@@ -339,12 +339,14 @@ impl<'a> Parser<'a> {
             TOKENTYPE::IDENTIFIER => {
                 let expression: Box<dyn ast::Expression> = if self.peek_token_is(TOKENTYPE::LPAREN) {
                     Box::from(self.parse_function_call()?)
+                } else if self.peek_token_is(TOKENTYPE::LSQR) {
+                    Box::from(self.parse_array_index()?)
                 } else {
                     Box::from(self.parse_identifier())
                 };
                 Ok(expression)
             }
-            TOKENTYPE::NUMBER => Ok(self.parse_number()?),
+            TOKENTYPE::NUMBER => Ok(Box::from(self.parse_number()?)),
             _ => Err("Invalid Expression: Expression must start with a literal or variable".to_string())
         }
     }
@@ -404,8 +406,27 @@ impl<'a> Parser<'a> {
         }))
     }
 
+    // Precondition: Caller must check that current_token is an LSQR
+    fn parse_array_index(&mut self) -> Result<ast::ArrayIndex, String> {
+        // Assert that caller made sure current token is an identifier followed by a left square bracket
+        assert!(self.current_token_is(TOKENTYPE::IDENTIFIER));
+        assert!(self.peek_token_is(TOKENTYPE::LSQR));
+        let ident = self.parse_identifier();
+        // move past left square bracket to index
+        self.next_token();
+        let index = self.parse_expression(0)?;
+        if !self.current_token_is(TOKENTYPE::RSQR) {
+            return Err(format!("Invalid Array index: Expected a \"]\" after index expression, found {:?}", self.current_token));
+        }
+        self.next_token();
+        Ok(ast::ArrayIndex {
+            ident,
+            index,
+        })
+    }
+
     // Precondition: Caller must check that current_token is a number
-    fn parse_number(&mut self) -> Result<Box<ast::Number>, String> {
+    fn parse_number(&mut self) -> Result<ast::Number, String> {
         // Assert that the current token is a number
         assert!(self.current_token_is(TOKENTYPE::NUMBER));
         let number_token = self.current_token.take().unwrap();
@@ -418,10 +439,10 @@ impl<'a> Parser<'a> {
                 return Err(String::from("Parse number encountered error parsing literal as number"));
             }
         };
-        Ok(Box::from(ast::Number {
+        Ok(ast::Number {
             token: number_token,
             value
-        }))
+        })
     }
 
     // Precondition: Caller must only call this if the current token is an open parenthesis

@@ -12,13 +12,9 @@ pub trait Node {
     fn eval(&self, env: &mut GabrEnv) -> Result<GabrValue, String>;
 }
 
-pub trait Statement : Node + Debug {
-    fn statement_node(&self) -> Box<dyn Node>;
-}
+pub trait Statement : Node + Debug {}
 
-pub trait Expression : Node + Debug {
-    fn expression_node(&self) -> Box<dyn Node>;
-}
+pub trait Expression : Node + Debug {}
 
 #[derive(Debug)]
 pub struct Program {
@@ -83,11 +79,8 @@ impl Node for CodeBlock {
     }
 }
 
-impl Statement for CodeBlock {
-    fn statement_node(&self) -> Box<dyn Node> {
-        todo!()
-    }
-}
+impl Statement for CodeBlock {}
+
 #[derive(Debug)]
 pub struct InfixExpression {
     pub token: Token,
@@ -120,11 +113,7 @@ impl Node for InfixExpression {
     }
 }
 
-impl Expression for InfixExpression {
-    fn expression_node(&self) -> Box<dyn Node> {
-        todo!()
-    }
-}
+impl Expression for InfixExpression {}
 
 #[derive(Debug)]
 pub struct GroupExpression {
@@ -156,11 +145,7 @@ impl Node for GroupExpression {
     }
 }
 
-impl Expression for GroupExpression {
-    fn expression_node(&self) -> Box<dyn Node> {
-        todo!()
-    }
-}
+impl Expression for GroupExpression {}
 
 #[derive(Debug)]
 pub struct ExpressionStatement {
@@ -187,11 +172,7 @@ impl Node for ExpressionStatement {
     }
 }
 
-impl Statement for ExpressionStatement {
-    fn statement_node(&self) -> Box<dyn Node> {
-        todo!()
-    }
-}
+impl Statement for ExpressionStatement {}
 
 #[derive(Debug)]
 pub struct LetStatement {
@@ -224,11 +205,7 @@ impl Node for LetStatement {
     }
 }
 
-impl Statement for LetStatement {
-    fn statement_node(&self) -> Box<dyn Node> {
-        todo!()
-    }
-}
+impl Statement for LetStatement {}
 
 #[derive(Debug)]
 pub struct AssignStatement {
@@ -257,11 +234,7 @@ impl Node for AssignStatement {
     }
 }
 
-impl Statement for AssignStatement {
-    fn statement_node(&self) -> Box<dyn Node> {
-        todo!();
-    }
-}
+impl Statement for AssignStatement {}
 
 #[derive(Debug)]
 pub struct WhileLoop {
@@ -292,11 +265,7 @@ impl Node for WhileLoop {
     }
 }
 
-impl Statement for WhileLoop {
-    fn statement_node(&self) -> Box<dyn Node> {
-        todo!()
-    }
-}
+impl Statement for WhileLoop {}
 
 #[derive(Debug)]
 pub struct IfStatement {
@@ -333,11 +302,7 @@ impl Node for IfStatement {
     }
 }
 
-impl Statement for IfStatement {
-    fn statement_node(&self) -> Box<dyn Node> {
-        todo!()
-    }
-}
+impl Statement for IfStatement {}
 
 #[derive(Debug)]
 pub struct ReturnStatement {
@@ -367,11 +332,7 @@ impl Node for ReturnStatement {
     }
 }
 
-impl Statement for ReturnStatement {
-    fn statement_node(&self) -> Box<dyn Node> {
-        todo!()
-    }
-}
+impl Statement for ReturnStatement {}
 
 #[derive(Debug, Clone)]
 pub struct Function {
@@ -406,11 +367,7 @@ impl Node for Function {
     }
 }
 
-impl Statement for Function {
-    fn statement_node(&self) -> Box<dyn Node> {
-        todo!()
-    }
-}
+impl Statement for Function {}
 
 #[derive(Debug)]
 pub struct FunctionCall {
@@ -440,11 +397,7 @@ impl Node for FunctionCall {
     }
 }
 
-impl Expression for FunctionCall {
-    fn expression_node(&self) -> Box<dyn Node> {
-        todo!()
-    }
-}
+impl Expression for FunctionCall {}
 
 #[derive(Debug, Clone)]
 pub struct Identifier {
@@ -470,11 +423,7 @@ impl Node for Identifier {
     }
 }
 
-impl Expression for Identifier {
-    fn expression_node(&self) -> Box<dyn Node> {
-        todo!()
-    }
-}
+impl Expression for Identifier {}
 
 #[derive(Debug)]
 pub struct ArrayLiteral {
@@ -504,11 +453,37 @@ impl Node for ArrayLiteral {
     }
 }
 
-impl Expression for ArrayLiteral {
-    fn expression_node(&self) -> Box<dyn Node> {
-        todo!()
+impl Expression for ArrayLiteral {}
+
+#[derive(Debug)]
+pub struct ArrayIndex {
+    pub ident: Identifier,
+    pub index: Box<dyn Expression>
+}
+
+impl Node for ArrayIndex {
+    fn token_literal(&self) -> String {
+        self.ident.token_literal()
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn to_string(&self) -> String {
+        let mut output = self.ident.to_string();
+        output.push('[');
+        output.push_str(&self.index.to_string());
+        output.push(']');
+        output
+    }
+
+    fn eval(&self, env: &mut GabrEnv) -> Result<GabrValue, String> {
+        evaluator::eval_array_index(env, self)
     }
 }
+
+impl Expression for ArrayIndex {}
 
 #[derive(Debug)]
 pub struct Number {
@@ -534,8 +509,4 @@ impl Node for Number {
     }
 }
 
-impl Expression for Number {
-    fn expression_node(&self) -> Box<dyn Node> {
-        todo!()
-    }
-}
+impl Expression for Number {}

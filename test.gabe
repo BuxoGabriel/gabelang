@@ -15,4 +15,17 @@ while i {
     i = i - 1;
 }
 
-b;
+let arr = [1, 2, 3];
+
+i = 0;
+let total = 0;
+while i < 3 {
+    total = total + arr[i];
+    i = i + 1;
+}
+
+fn call_twice(f, p) {
+    return f(f(p));
+}
+
+call_twice(add_one, 1)
