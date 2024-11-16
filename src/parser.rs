@@ -307,6 +307,9 @@ impl<'a> Parser<'a> {
         if self.current_token_is(TOKENTYPE::LSQR) {
             return Ok(self.parse_array_literal()?)
         }
+        if self.current_token_is(TOKENTYPE::LSQUIG) {
+            return Ok(self.parse_object_literal()?)
+        }
         if !self.current_token_is(TOKENTYPE::NUMBER) && !self.current_token_is(TOKENTYPE::IDENTIFIER) {
             return Err(format!("Invalid Expression: Expression must start with a literal or variable, started with: {:?}", self.current_token));
         }
@@ -403,6 +406,35 @@ impl<'a> Parser<'a> {
             open_token,
             close_token,
             values
+        }))
+    }
+
+    // Precondition: Caller must make sure that current_token is an left squigly
+    fn parse_object_literal(&mut self) -> Result<Box<ast::ObjectLiteral>, String> {
+        assert!(self.current_token_is(TOKENTYPE::LSQUIG));
+        let open_token = self.current_token.take().unwrap();
+        // Move on to fields
+        self.next_token();
+        let mut fields = Vec::new();
+        while self.current_token_is(TOKENTYPE::IDENTIFIER) {
+            let name = self.parse_identifier();
+            if !self.current_token_is(TOKENTYPE::COLON) {
+                return Err("Invalid Object Literal: Expected a colon after field name and before value expression".to_string());
+            }
+            // Move past colon to expression
+            self.next_token();
+            let value = self.parse_expression(0)?;
+            fields.push((name, value));
+        }
+        if !self.current_token_is(TOKENTYPE::RSQUIG) {
+            return Err("Invalid Object Literal: Expected literal to be closed with a \"}\"".to_string());
+        }
+        let close_token = self.current_token.take().unwrap();
+        self.next_token();
+        Ok(Box::from(ast::ObjectLiteral {
+            open_token,
+            close_token,
+            fields
         }))
     }
 

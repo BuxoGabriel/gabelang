@@ -492,6 +492,8 @@ impl Node for ObjectLiteral {
     }
 }
 
+impl Expression for ObjectLiteral {}
+
 #[derive(Debug)]
 pub struct ArrayIndex {
     pub ident: Identifier,
