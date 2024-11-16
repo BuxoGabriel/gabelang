@@ -87,6 +87,7 @@ enum ObjectType {
     NUMBER(i64),
     ARRAY(Vec<ObjectType>),
     FUNCTION(ast::Function),
+    OBJECT(HashMap<String, ObjectType>),
     NULL
 }
 
@@ -104,7 +105,23 @@ impl ObjectType {
                 }).collect::<Vec<String>>().join(", "));
                 output.push(']');
                 Some(output)
-            }
+            },
+            Self::OBJECT(obj) => {
+                let mut output = "{\n".to_string();
+                for (key, val) in obj.iter() {
+                    output.push('\t');
+                    output.push_str(key);
+                    output.push_str(": ");
+                    let value_string = match val.to_string() {
+                        Some(val) => val,
+                        None => "undefined".to_string()
+                    };
+                    output.push_str(&value_string);
+                    output.push('\n');
+                }
+                output.push('}');
+                Some(output)
+            },
             Self::FUNCTION(func) => {
                 Some(format!("(Function: {})", func.ident.name))
             },
@@ -300,6 +317,10 @@ pub fn eval_array_literal(env: &mut GabrEnv, array_lit: &ast::ArrayLiteral) -> R
     err?;
     let arr: Vec<ObjectType> = arr.into_iter().map(|v| v.unwrap().gabr_object).collect();
     Ok(GabrValue::new(ObjectType::ARRAY(arr), false))
+}
+
+pub fn eval_object_literal(env: &mut GabrEnv, object_lit: &ast::ObjectLiteral) -> Result<GabrValue, String> {
+    todo!()
 }
 
 pub fn eval_array_index(env: &mut GabrEnv, array_index: &ast::ArrayIndex) -> Result<GabrValue, String> {

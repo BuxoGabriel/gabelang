@@ -456,6 +456,43 @@ impl Node for ArrayLiteral {
 impl Expression for ArrayLiteral {}
 
 #[derive(Debug)]
+pub struct ObjectLiteral {
+    pub open_token: Token,
+    pub close_token: Token,
+    pub fields: Vec<(Identifier, Box<dyn Expression>)>
+}
+
+impl Node for ObjectLiteral {
+    fn token_literal(&self) -> String {
+        let mut output = self.open_token.literal.clone();
+        output.push_str(&self.close_token.literal.clone());
+        output
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn to_string(&self) -> String {
+        let mut output = self.open_token.literal.clone();
+        output.push_str(
+            &self.fields.iter().map(|(ident, value)| {
+                let mut output = ident.name.clone();
+                output.push_str(": ");
+                output.push_str(&value.to_string());
+                output
+            }).collect::<Vec<String>>().join(" ")
+        );
+        output.push_str(&self.close_token.literal.clone());
+        output
+    }
+
+    fn eval(&self, env: &mut GabrEnv) -> Result<GabrValue, String> {
+        evaluator::eval_object_literal(env, self)
+    }
+}
+
+#[derive(Debug)]
 pub struct ArrayIndex {
     pub ident: Identifier,
     pub index: Box<dyn Expression>
