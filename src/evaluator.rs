@@ -320,7 +320,21 @@ pub fn eval_array_literal(env: &mut GabrEnv, array_lit: &ast::ArrayLiteral) -> R
 }
 
 pub fn eval_object_literal(env: &mut GabrEnv, object_lit: &ast::ObjectLiteral) -> Result<GabrValue, String> {
-    todo!()
+    // Create an object
+    let fields: Vec<(String, Result<GabrValue, String>)>  = object_lit.fields.iter().map(|(ident, expression)| (ident.name.clone(), expression.eval(env))).collect();
+    // Check for error in evaluated fields
+    let mut err = Ok(());
+    fields.iter().for_each(|(_, v)| {
+        if let Err(e) = v {
+            *&mut err = Err(e);
+        }
+    });
+    err?;
+    let fields: HashMap<String, ObjectType> = fields.into_iter().map(|(name, val)| {
+        let val = val.unwrap().gabr_object;
+        (name, val)
+    }).collect();
+    Ok(GabrValue::new(ObjectType::OBJECT(fields), false))
 }
 
 pub fn eval_array_index(env: &mut GabrEnv, array_index: &ast::ArrayIndex) -> Result<GabrValue, String> {
