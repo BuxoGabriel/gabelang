@@ -29,3 +29,11 @@ fn call_twice(f, p) {
 }
 
 len(arr) == call_twice(add_one, 1)
+
+let object = {
+    field_one: 1,
+    field_two: 2 * 2,
+    field_three: add_one
+};
+
+object.field_two

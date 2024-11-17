@@ -344,7 +344,9 @@ impl<'a> Parser<'a> {
                     Box::from(self.parse_function_call()?)
                 } else if self.peek_token_is(TOKENTYPE::LSQR) {
                     Box::from(self.parse_array_index()?)
-                } else {
+                } else if self.peek_token_is(TOKENTYPE::DOT) {
+                    Box::from(self.parse_object_property()?)
+                }else {
                     Box::from(self.parse_identifier())
                 };
                 Ok(expression)
@@ -425,6 +427,12 @@ impl<'a> Parser<'a> {
             self.next_token();
             let value = self.parse_expression(0)?;
             fields.push((name, value));
+            // Each property should be delimited by a comma
+            if self.current_token_is(TOKENTYPE::COMMA) {
+                self.next_token()
+            } else {
+                break
+            }
         }
         if !self.current_token_is(TOKENTYPE::RSQUIG) {
             return Err("Invalid Object Literal: Expected literal to be closed with a \"}\"".to_string());
@@ -454,6 +462,24 @@ impl<'a> Parser<'a> {
         Ok(ast::ArrayIndex {
             ident,
             index,
+        })
+    }
+
+    // Precondition: Caller must check that current_token is an identifier and peek_token is a dot
+    fn parse_object_property(&mut self) -> Result<ast::ObjectProperty, String> {
+        // Assert that caller made sure current token is an identifier followed by a dot
+        assert!(self.current_token_is(TOKENTYPE::IDENTIFIER));
+        assert!(self.peek_token_is(TOKENTYPE::DOT));
+        let ident = self.parse_identifier();
+        // move past dot to get the object property
+        self.next_token();
+        if !self.current_token_is(TOKENTYPE::IDENTIFIER) {
+            return Err("Invalid Object Property: Invalid object property name".to_string());
+        }
+        let property = self.parse_identifier();
+        Ok(ast::ObjectProperty {
+            ident,
+            property
         })
     }
 

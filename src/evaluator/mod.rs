@@ -385,6 +385,25 @@ pub fn eval_array_index(env: &mut GabrEnv, array_index: &ast::ArrayIndex) -> Res
     }
 }
 
+pub fn eval_object_property(env: &mut GabrEnv, object_prop: &ast::ObjectProperty) -> Result<GabrValue, String> {
+    let obj = match env.get_var(object_prop.ident.name.clone()) {
+        Some(obj) => obj,
+        None => {
+            return Err(format!("Object \"{}\" could not be found", object_prop.ident.name));
+        }
+    };
+    if let ObjectType::OBJECT(obj) = obj.gabr_object.clone() {
+        let prop = &object_prop.property.name;
+        if let Some(prop) = obj.get(prop) {
+            Ok(GabrValue::new(prop.clone(), false))
+        } else {
+            Ok(GabrValue::new(ObjectType::NULL, false))
+        }
+    } else {
+        Err(format!("Variable \"{}\" is not an object and does not have properties", object_prop.ident.name))
+    }
+}
+
 pub fn eval_number_literal(num_lit: &ast::Number) -> Result<GabrValue, String> {
     Ok(GabrValue::new(ObjectType::NUMBER(num_lit.value), false))
 }

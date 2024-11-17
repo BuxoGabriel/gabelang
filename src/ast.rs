@@ -525,6 +525,35 @@ impl Node for ArrayIndex {
 impl Expression for ArrayIndex {}
 
 #[derive(Debug)]
+pub struct ObjectProperty {
+    pub ident: Identifier,
+    pub property: Identifier
+}
+
+impl Node for ObjectProperty {
+    fn token_literal(&self) -> String {
+        self.ident.token_literal()
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn to_string(&self) -> String {
+        let mut output = self.ident.to_string();
+        output.push('.');
+        output.push_str(&self.property.to_string());
+        output
+    }
+
+    fn eval(&self, env: &mut GabrEnv) -> Result<GabrValue, String> {
+        evaluator::eval_object_property(env, self)
+    }
+}
+
+impl Expression for ObjectProperty {}
+
+#[derive(Debug)]
 pub struct Number {
     pub token: Token,
     pub value: i64
