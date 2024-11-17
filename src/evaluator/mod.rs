@@ -1,8 +1,9 @@
 use std::rc::Rc;
 use std::collections::HashMap;
 
+mod built_ins;
+
 use crate::ast::{self, Node};
-use crate::built_ins;
 
 pub struct GabrEnv {
     var_scopes: Vec<HashMap<String, GabrValue>>,
@@ -16,12 +17,12 @@ impl GabrEnv {
         Self { var_scopes, built_ins }
     }
 
-    pub fn create_func(&mut self, name: String, val: ast::Function) {
+    fn create_func(&mut self, name: String, val: ast::Function) {
         let scope = self.var_scopes.last_mut().expect("Tried to create function but no scopes are available in environment");
         scope.insert(name, GabrValue::new(ObjectType::FUNCTION(val), false));
     }
 
-    pub fn get_func(&self, name: String) -> Option<ast::Function> {
+    fn get_func(&self, name: String) -> Option<ast::Function> {
         self.var_scopes.iter().rev().find_map(|scope| scope.get(&name).and_then(|val| {
             match val.gabr_object.clone() {
                 ObjectType::FUNCTION(func) => Some(func),
@@ -30,16 +31,16 @@ impl GabrEnv {
         }))
     }
 
-    pub fn get_built_in(&self, name: String) -> Option<Rc<dyn built_ins::BuiltIn>> {
+    fn get_built_in(&self, name: String) -> Option<Rc<dyn built_ins::BuiltIn>> {
         self.built_ins.get(&name).map(|bi| bi.clone())
     }
 
-    pub fn create_var(&mut self, name: String, val: GabrValue) {
+    fn create_var(&mut self, name: String, val: GabrValue) {
         let scope = self.var_scopes.last_mut().expect("Tried to create variable but no scopes are available in environment");
         scope.insert(name, val);
     }
 
-    pub fn set_var(&mut self, name: String, val: GabrValue) -> Result<(),String> {
+    fn set_var(&mut self, name: String, val: GabrValue) -> Result<(),String> {
         for scope in self.var_scopes.iter_mut().rev() {
             if scope.contains_key(&name) {
                 scope.insert(name.clone(), val);
@@ -49,7 +50,7 @@ impl GabrEnv {
         Err("Environment does not contain variable to be altered".to_string())
     }
 
-    pub fn get_var(&self, name: String) -> Option<&GabrValue> {
+    fn get_var(&self, name: String) -> Option<&GabrValue> {
         for scope in self.var_scopes.iter().rev() {
             if let Some(val) = scope.get(&name) {
                 return Some(val);
@@ -65,12 +66,26 @@ impl GabrEnv {
     fn pop_scope(&mut self) {
         self.var_scopes.pop();
     }
+
+    fn load_params(&mut self, params: Vec<(String, Result<GabrValue, String>)>) -> Result<(), String> {
+        let mut err = Ok(());
+        params.iter().for_each(|(name, val)| {
+            match val {
+                Ok(val) => self.create_var(name.clone(), val.clone()),
+                Err(e) => err = Err(e),
+            }
+        });
+        // If there was a problem evaluating a parameter return its error
+        err?;
+        Ok(())
+    }
+
 }
 
 #[derive(Clone)]
 pub struct GabrValue {
-    pub gabr_object: ObjectType,
-    pub returning: bool,
+    gabr_object: ObjectType,
+    returning: bool,
 }
 
 impl GabrValue {
@@ -84,7 +99,7 @@ impl GabrValue {
 }
 
 #[derive(Clone)]
-pub enum ObjectType {
+enum ObjectType {
     NUMBER(i64),
     ARRAY(Vec<ObjectType>),
     FUNCTION(ast::Function),
@@ -93,7 +108,7 @@ pub enum ObjectType {
 }
 
 impl ObjectType {
-    pub fn to_string(&self) -> Option<String> {
+    fn to_string(&self) -> Option<String> {
         match self {
             Self::NUMBER(val) => Some(val.to_string()),
             Self::ARRAY(vals) => {
@@ -277,7 +292,7 @@ pub fn eval_function_call(env: &mut GabrEnv, func_call: &ast::FunctionCall) -> R
             .collect();
         // Create new scope for parameters
         env.push_scope();
-        load_params(env, params)?;
+        env.load_params(params)?;
         // Evaluate the body of the function with the new context
         let mut result = func.body.eval(env)?;
         // Remove param variables scope
@@ -293,7 +308,7 @@ pub fn eval_function_call(env: &mut GabrEnv, func_call: &ast::FunctionCall) -> R
                 .collect();
             // Create new scope for parameters
             env.push_scope();
-            load_params(env, params)?;
+            env.load_params(params)?;
             // Evaluate built in function in new context
             let mut result =  built_in.eval(env)?;
             // Remove param variables scope
@@ -305,19 +320,6 @@ pub fn eval_function_call(env: &mut GabrEnv, func_call: &ast::FunctionCall) -> R
             Err(format!("Function {} could not be found", func_name))
         }
     }
-}
-
-fn load_params(env: &mut GabrEnv, params: Vec<(String, Result<GabrValue, String>)>) -> Result<(), String> {
-    let mut err = Ok(());
-    params.iter().for_each(|(name, val)| {
-        match val {
-            Ok(val) => env.create_var(name.clone(), val.clone()),
-            Err(e) => err = Err(e),
-        }
-    });
-    // If there was a problem evaluating a parameter return its error
-    err?;
-    Ok(())
 }
 
 pub fn eval_identifier(env: &GabrEnv, ident: &ast::Identifier) -> Result<GabrValue, String> {
