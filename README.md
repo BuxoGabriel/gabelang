@@ -47,10 +47,15 @@ cargo build
 
 ## Run
 
-Run with
+Run as repl with
 ```sh
 cargo run
 ```
+or run a script with
+```sh
+cargo run -- --file [script name]
+```
+
 
 ## Test
 
