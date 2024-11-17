@@ -2,7 +2,7 @@
 
 ## Overview
 
-This is a language I am writing in rust for fun and to learn more about lexers, parsers, and to dymistify coding languages in general.
+This is a language I am writing in rust for fun and to learn more about lexers, parsers, interpreters, and to dymistify programming languages in general.
 The *Writing an Interpreter in Go* book by Thorsten Ball was used as a reference for constructing my lexer and parser.
 
 ## BNF / Language Grammer
