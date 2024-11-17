@@ -46,7 +46,6 @@ cargo test
 
 ## Todo
 
-- Objects
 - Built in Functions
 - Add tests to ast and eval modules
 - Add fun language syntax

@@ -1,44 +1,45 @@
+use std::rc::Rc;
 use std::collections::HashMap;
 
 use crate::ast::{self, Node};
+use crate::built_ins;
 
 pub struct GabrEnv {
     var_scopes: Vec<HashMap<String, GabrValue>>,
+    built_ins: HashMap<String, Rc<dyn built_ins::BuiltIn>>
 }
 
 impl GabrEnv {
     pub fn new() -> Self {
         let var_scopes = vec![HashMap::new()];
-        Self { var_scopes }
+        let built_ins = built_ins::load_built_ins();
+        Self { var_scopes, built_ins }
     }
 
-    fn create_func(&mut self, name: String, val: ast::Function) {
+    pub fn create_func(&mut self, name: String, val: ast::Function) {
         let scope = self.var_scopes.last_mut().expect("Tried to create function but no scopes are available in environment");
         scope.insert(name, GabrValue::new(ObjectType::FUNCTION(val), false));
     }
 
-    fn get_func(&self, name: String) -> Option<ast::Function> {
-        for scope in self.var_scopes.iter().rev() {
-            if let Some(val) = scope.get(&name) {
-                match val.gabr_object.clone() {
-                    ObjectType::FUNCTION(func) => {
-                        return Some(func);
-                    },
-                    _ => {
-                        return None;
-                    }
-                }
+    pub fn get_func(&self, name: String) -> Option<ast::Function> {
+        self.var_scopes.iter().rev().find_map(|scope| scope.get(&name).and_then(|val| {
+            match val.gabr_object.clone() {
+                ObjectType::FUNCTION(func) => Some(func),
+                _ => None
             }
-        }
-        None
+        }))
     }
 
-    fn create_var(&mut self, name: String, val: GabrValue) {
+    pub fn get_built_in(&self, name: String) -> Option<Rc<dyn built_ins::BuiltIn>> {
+        self.built_ins.get(&name).map(|bi| bi.clone())
+    }
+
+    pub fn create_var(&mut self, name: String, val: GabrValue) {
         let scope = self.var_scopes.last_mut().expect("Tried to create variable but no scopes are available in environment");
         scope.insert(name, val);
     }
 
-    fn set_var(&mut self, name: String, val: GabrValue) -> Result<(),String> {
+    pub fn set_var(&mut self, name: String, val: GabrValue) -> Result<(),String> {
         for scope in self.var_scopes.iter_mut().rev() {
             if scope.contains_key(&name) {
                 scope.insert(name.clone(), val);
@@ -48,7 +49,7 @@ impl GabrEnv {
         Err("Environment does not contain variable to be altered".to_string())
     }
 
-    fn get_var(&self, name: String) -> Option<&GabrValue> {
+    pub fn get_var(&self, name: String) -> Option<&GabrValue> {
         for scope in self.var_scopes.iter().rev() {
             if let Some(val) = scope.get(&name) {
                 return Some(val);
@@ -68,8 +69,8 @@ impl GabrEnv {
 
 #[derive(Clone)]
 pub struct GabrValue {
-    gabr_object: ObjectType,
-    returning: bool,
+    pub gabr_object: ObjectType,
+    pub returning: bool,
 }
 
 impl GabrValue {
@@ -83,7 +84,7 @@ impl GabrValue {
 }
 
 #[derive(Clone)]
-enum ObjectType {
+pub enum ObjectType {
     NUMBER(i64),
     ARRAY(Vec<ObjectType>),
     FUNCTION(ast::Function),
@@ -267,19 +268,46 @@ pub fn eval_function_call(env: &mut GabrEnv, func_call: &ast::FunctionCall) -> R
     // Get name of function
     let func_name = func_call.ident.name.clone();
     // look in all scopes for a function that matches function name
-    let func = match env.get_func(func_name.clone()) {
-        Some(func) => func,
-        None => {
-            return Err(format!("Function \"{}\" could not be found", func_name));
+    let func = env.get_func(func_name.clone());
+    if let Some(func) = func {
+        // Create (parameter, value) list
+        let params: Vec<(String, Result<GabrValue, String>)> = func.params.iter()
+            .map(|param| param.name.clone())
+            .zip(func_call.params.iter().map(|param| param.eval(env)))
+            .collect();
+        // Create new scope for parameters
+        env.push_scope();
+        load_params(env, params)?;
+        // Evaluate the body of the function with the new context
+        let mut result = func.body.eval(env)?;
+        // Remove param variables scope
+        env.pop_scope();
+        // Function call should not automatically be interpretted as return funcCall(param);
+        result.returning = false;
+        Ok(result)
+    } else {
+        if let Some(built_in) = env.get_built_in(func_name.clone()) {
+            let params: Vec<(String, Result<GabrValue, String>)> = built_in.get_params().iter()
+                .map(|param| param.clone())
+                .zip(func_call.params.iter().map(|param| param.eval(env)))
+                .collect();
+            // Create new scope for parameters
+            env.push_scope();
+            load_params(env, params)?;
+            // Evaluate built in function in new context
+            let mut result =  built_in.eval(env)?;
+            // Remove param variables scope
+            env.pop_scope();
+            // Function call should not automatically be interpretted as return funcCall(param);
+            result.returning = false;
+            Ok(result)
+        } else {
+            Err(format!("Function {} could not be found", func_name))
         }
-    };
-    // Create new scope for parameters
-    env.push_scope();
-    // Add every parameter to new scope
-    let params: Vec<(String, Result<GabrValue, String>)> = func.params.iter()
-        .map(|param| param.name.clone())
-        .zip(func_call.params.iter().map(|param| param.eval(env)))
-        .collect();
+    }
+}
+
+fn load_params(env: &mut GabrEnv, params: Vec<(String, Result<GabrValue, String>)>) -> Result<(), String> {
     let mut err = Ok(());
     params.iter().for_each(|(name, val)| {
         match val {
@@ -289,13 +317,7 @@ pub fn eval_function_call(env: &mut GabrEnv, func_call: &ast::FunctionCall) -> R
     });
     // If there was a problem evaluating a parameter return its error
     err?;
-    // Evaluate the body of the function with the new context
-    let mut result = func.body.eval(env)?;
-    // Remove param variables scope
-    env.pop_scope();
-    // Function call should not automatically be interpretted as return funcCall(param);
-    result.returning = false;
-    Ok(result)
+    Ok(())
 }
 
 pub fn eval_identifier(env: &GabrEnv, ident: &ast::Identifier) -> Result<GabrValue, String> {

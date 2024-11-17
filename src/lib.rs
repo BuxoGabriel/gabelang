@@ -5,6 +5,7 @@ mod lexer;
 mod ast;
 mod parser;
 mod evaluator;
+mod built_ins;
 
 use evaluator::GabrEnv;
 use parser::Parser;
