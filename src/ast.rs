@@ -16,6 +16,11 @@ pub trait Statement : Node + Debug {}
 
 pub trait Expression : Node + Debug {}
 
+pub trait Assignable: Expression {
+    fn as_expression(self) -> Box<dyn Expression>;
+    fn set_value(&self, env: &mut GabrEnv, val: GabrValue) -> Result<(), String>;
+}
+
 #[derive(Debug)]
 pub struct Program {
     pub statements: Vec<Rc<dyn Statement>>,
@@ -148,8 +153,46 @@ impl Node for GroupExpression {
 impl Expression for GroupExpression {}
 
 #[derive(Debug)]
+pub enum ExpressionType {
+    Assignable(Box<dyn Assignable>),
+    NonAssignable(Box<dyn Expression>)
+}
+
+impl Node for ExpressionType {
+    fn token_literal(&self) -> String {
+        match self {
+            Self::Assignable(exp) => exp.token_literal(),
+            Self::NonAssignable(exp) => exp.token_literal()
+        }
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        match self {
+            Self::Assignable(exp) => exp.as_any(),
+            Self::NonAssignable(exp) => exp.as_any()
+        }
+    }
+
+    fn to_string(&self) -> String {
+        match self {
+            Self::Assignable(exp) => exp.to_string(),
+            Self::NonAssignable(exp) => exp.to_string()
+        }
+    }
+
+    fn eval(&self, env: &mut GabrEnv) -> Result<GabrValue, String> {
+        match self {
+            Self::Assignable(exp) => exp.eval(env),
+            Self::NonAssignable(exp) => exp.eval(env)
+        }
+    }
+}
+
+impl Expression for  ExpressionType {}
+
+#[derive(Debug)]
 pub struct ExpressionStatement {
-    pub expression: Box<dyn Expression>
+    pub expression: ExpressionType
 }
 
 impl Node for ExpressionStatement {
@@ -209,7 +252,7 @@ impl Statement for LetStatement {}
 
 #[derive(Debug)]
 pub struct AssignStatement {
-    pub ident: Identifier,
+    pub ident: Box<dyn Assignable>,
     pub expression: Box<dyn Expression>
 }
 
@@ -425,6 +468,16 @@ impl Node for Identifier {
 
 impl Expression for Identifier {}
 
+impl Assignable for Identifier {
+    fn as_expression(self) -> Box<dyn Expression> {
+        Box::from(self)
+    }
+
+    fn set_value(&self, env: &mut GabrEnv, val: GabrValue) -> Result<(), String>{
+        evaluator::set_identifier(env, self, val)
+    }
+}
+
 #[derive(Debug)]
 pub struct ArrayLiteral {
     pub open_token: Token,
@@ -524,6 +577,16 @@ impl Node for ArrayIndex {
 
 impl Expression for ArrayIndex {}
 
+impl Assignable for ArrayIndex {
+    fn as_expression(self) -> Box<dyn Expression> {
+        Box::from(self)
+    }
+
+    fn set_value(&self, env: &mut GabrEnv, val: GabrValue) -> Result<(), String> {
+        evaluator::set_array_index(env, self, val)
+    }
+}
+
 #[derive(Debug)]
 pub struct ObjectProperty {
     pub ident: Identifier,
@@ -552,6 +615,16 @@ impl Node for ObjectProperty {
 }
 
 impl Expression for ObjectProperty {}
+
+impl Assignable for ObjectProperty {
+    fn as_expression(self) -> Box<dyn Expression> {
+        Box::from(self)
+    }
+
+    fn set_value(&self, env: &mut GabrEnv, val: GabrValue) -> Result<(), String> {
+        evaluator::set_object_prop(env, self, val)
+    }
+}
 
 #[derive(Debug)]
 pub struct Number {

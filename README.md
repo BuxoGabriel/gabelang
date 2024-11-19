@@ -66,6 +66,7 @@ cargo test
 
 ## Todo
 
+- allow assignment to object properties and array indexed
 - object property parsing and evaluation
 - Built in Functions
 - Add tests to ast and eval modules

@@ -6,7 +6,7 @@ mod built_ins;
 use crate::ast::{self, Node};
 
 pub struct GabrEnv {
-    var_scopes: Vec<HashMap<String, GabrValue>>,
+    var_scopes: Vec<HashMap<String, ObjectType>>,
     built_ins: HashMap<String, Rc<dyn built_ins::BuiltIn>>
 }
 
@@ -19,12 +19,12 @@ impl GabrEnv {
 
     fn create_func(&mut self, name: String, val: ast::Function) {
         let scope = self.var_scopes.last_mut().expect("Tried to create function but no scopes are available in environment");
-        scope.insert(name, GabrValue::new(ObjectType::FUNCTION(val), false));
+        scope.insert(name, ObjectType::FUNCTION(val));
     }
 
     fn get_func(&self, name: String) -> Option<ast::Function> {
         self.var_scopes.iter().rev().find_map(|scope| scope.get(&name).and_then(|val| {
-            match val.gabr_object.clone() {
+            match val.clone() {
                 ObjectType::FUNCTION(func) => Some(func),
                 _ => None
             }
@@ -35,12 +35,12 @@ impl GabrEnv {
         self.built_ins.get(&name).map(|bi| bi.clone())
     }
 
-    fn create_var(&mut self, name: String, val: GabrValue) {
+    fn create_var(&mut self, name: String, val: ObjectType) {
         let scope = self.var_scopes.last_mut().expect("Tried to create variable but no scopes are available in environment");
         scope.insert(name, val);
     }
 
-    fn set_var(&mut self, name: String, val: GabrValue) -> Result<(),String> {
+    fn set_var(&mut self, name: String, val: ObjectType) -> Result<(),String> {
         for scope in self.var_scopes.iter_mut().rev() {
             if scope.contains_key(&name) {
                 scope.insert(name.clone(), val);
@@ -50,9 +50,9 @@ impl GabrEnv {
         Err("Environment does not contain variable to be altered".to_string())
     }
 
-    fn get_var(&self, name: String) -> Option<&GabrValue> {
-        for scope in self.var_scopes.iter().rev() {
-            if let Some(val) = scope.get(&name) {
+    fn get_var(&mut self, name: String) -> Option<&mut ObjectType> {
+        for scope in self.var_scopes.iter_mut().rev() {
+            if let Some(val) = scope.get_mut(&name) {
                 return Some(val);
             }
         }
@@ -71,7 +71,7 @@ impl GabrEnv {
         let mut err = Ok(());
         params.iter().for_each(|(name, val)| {
             match val {
-                Ok(val) => self.create_var(name.clone(), val.clone()),
+                Ok(val) => self.create_var(name.clone(), val.gabr_object.clone()),
                 Err(e) => err = Err(e),
             }
         });
@@ -197,14 +197,65 @@ pub fn eval_while_loop(env: &mut GabrEnv, while_loop: &ast::WhileLoop) -> Result
 
 pub fn eval_let_statement(env: &mut GabrEnv, let_state: &ast::LetStatement) -> Result<GabrValue, String> {
     let val = let_state.expression.eval(env)?;
-    env.create_var(let_state.identifier.name.clone(), val);
+    env.create_var(let_state.identifier.name.clone(), val.gabr_object);
     Ok(GabrValue::new(ObjectType::NULL, false))
 }
 
 pub fn eval_assign_statement(env: &mut GabrEnv, set_state: &ast::AssignStatement) -> Result<GabrValue, String> {
     let val = set_state.expression.eval(env)?;
-    env.set_var(set_state.ident.name.clone(), val)?;
+    set_state.ident.set_value(env, val)?;
     Ok(GabrValue::new(ObjectType::NULL, false))
+}
+
+pub fn set_identifier(env: &mut GabrEnv, ident: &ast::Identifier, val: GabrValue) -> Result<(), String> {
+    env.set_var(ident.name.clone(), val.gabr_object)?;
+    Ok(())
+}
+
+pub fn set_array_index(env: &mut GabrEnv, array_index: &ast::ArrayIndex, val: GabrValue) -> Result<(), String> {
+    // Evaluate index that is trying to get indexed
+    let index = match array_index.index.eval(env)?.gabr_object {
+        ObjectType::NUMBER(num) => num as usize,
+        _ => {
+            return Err("index into array is not a number".to_string());
+        }
+    };
+    // Get array that user is trying to modifiy from stack
+    let arr = match env.get_var(array_index.ident.name.clone()) {
+        Some(arr) => arr,
+        None => {
+            return Err(format!("Variable {} does not exist in this scope", array_index.ident.name));
+        }
+    };
+    match arr {
+        ObjectType::ARRAY(arr) => {
+            if index >= arr.len() {
+                Err("index into array is out of bounds".to_string())
+            } else {
+                arr[index] = val.gabr_object;
+                Ok(())
+            }
+        },
+        _ => Err("Can not index non-array value".to_string())
+    }
+}
+
+pub fn set_object_prop(env: &mut GabrEnv, object_prop: &ast::ObjectProperty, val: GabrValue) -> Result<(), String> {
+    match env.get_var(object_prop.ident.name.clone()) {
+        Some(obj) => {
+            let prop  = object_prop.property.name.clone();
+            match obj {
+                ObjectType::OBJECT(obj) => {
+                    obj.insert(prop, val.gabr_object);
+                    Ok(())
+                },
+                _ => Err("Can not get property of non-object variable".to_string())
+            }
+        },
+        None => {
+            Err(format!("Variable {} does not exist in this scope", object_prop.ident.name))
+        }
+    }
 }
 
 pub fn eval_if_statement(env: &mut GabrEnv, if_state: &ast::IfStatement) -> Result<GabrValue, String> {
@@ -322,10 +373,10 @@ pub fn eval_function_call(env: &mut GabrEnv, func_call: &ast::FunctionCall) -> R
     }
 }
 
-pub fn eval_identifier(env: &GabrEnv, ident: &ast::Identifier) -> Result<GabrValue, String> {
+pub fn eval_identifier(env: &mut GabrEnv, ident: &ast::Identifier) -> Result<GabrValue, String> {
     match env.get_var(ident.name.clone()) {
-        Some(val) => Ok(val.clone()),
-        None => Err("Referenced Identifier could not be found".to_string())
+        Some(val) => Ok(GabrValue::new(val.clone(), false)),
+        None => Err(format!("Referenced Identifier \"{}\"could not be found", ident.name))
     }
 }
 
@@ -368,7 +419,7 @@ pub fn eval_array_index(env: &mut GabrEnv, array_index: &ast::ArrayIndex) -> Res
             return Err(format!("Array \"{}\" could not be found", array_index.ident.name));
         }
     };
-    if let ObjectType::ARRAY(vals) = arr.gabr_object.clone() {
+    if let ObjectType::ARRAY(vals) = arr.clone() {
         let index = array_index.index.eval(env)?;
         let index = match index.gabr_object {
             ObjectType::NUMBER(val) => val,
@@ -392,7 +443,7 @@ pub fn eval_object_property(env: &mut GabrEnv, object_prop: &ast::ObjectProperty
             return Err(format!("Object \"{}\" could not be found", object_prop.ident.name));
         }
     };
-    if let ObjectType::OBJECT(obj) = obj.gabr_object.clone() {
+    if let ObjectType::OBJECT(obj) = obj.clone() {
         let prop = &object_prop.property.name;
         if let Some(prop) = obj.get(prop) {
             Ok(GabrValue::new(prop.clone(), false))

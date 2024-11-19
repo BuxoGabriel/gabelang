@@ -133,9 +133,6 @@ impl<'a> Parser<'a> {
     fn parse_identifier_starting_statement(&mut self) -> Result<Rc<dyn ast::Statement>, String> {
         // Assert that current token is identifier
         assert!(self.current_token_is(TOKENTYPE::IDENTIFIER));
-        if self.current_token_is(TOKENTYPE::LPAREN) {
-            self.parse_function_call()?
-        }
         let ident = self.parse_assignable()?;
         if self.current_token_is(TOKENTYPE::EQUAL) {
             // Move on to expression
@@ -160,12 +157,12 @@ impl<'a> Parser<'a> {
     // Precondition: caller must ensure current_token is an identifier
     fn parse_assignable(&mut self) -> Result<Box<dyn ast::Assignable>, String> {
         assert!(self.current_token_is(TOKENTYPE::IDENTIFIER));
-        match &self.peek_token {
+        match self.peek_token {
             Some(token) => {
                 match token.token_type {
                     TOKENTYPE::LSQR => Ok(Box::from(self.parse_array_index()?)),
                     TOKENTYPE::DOT => Ok(Box::from(self.parse_object_property()?)),
-                    _ => Ok(Box::from(self.parse_identifier()))
+                    _ => Err(format!("Assignable parsing failed: Unexpected token after variable name: {:?}", token.token_type))
                 }
             },
             None => Ok(Box::from(self.parse_identifier()))

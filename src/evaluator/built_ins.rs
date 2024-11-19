@@ -28,7 +28,7 @@ impl BuiltIn for Len {
         let arr = env.get_var("_arr".to_string());
         match arr {
             Some(arr) => {
-                if let ObjectType::ARRAY(arr) = arr.gabr_object.clone() {
+                if let ObjectType::ARRAY(arr) = arr {
                     Ok(GabrValue {
                         gabr_object: ObjectType::NUMBER(arr.len() as i64),
                         returning: false
