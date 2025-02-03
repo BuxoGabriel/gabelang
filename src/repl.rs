@@ -1,5 +1,4 @@
 use std::io::{self, BufRead, Write};
-use crate::ast::Node;
 use crate::evaluator::GabrEnv;
 use crate::parser::Parser;
 
@@ -17,11 +16,10 @@ pub fn start() {
                 continue;
             }
         };
-        match program.eval(&mut env) {
+        
+        match env.eval_statement(&program[0]) {
             Ok(object) => {
-                if let Some(val) = object.to_string() {
-                    println!("{val}");
-                }
+                println!("{object}");
             },
             Err(err) => println!("{err}")
         };

@@ -58,6 +58,7 @@ impl<'a> Lexer<'a> {
             peekable_iter: contents.chars().peekable()
         }
     }
+
     pub fn parse(&mut self) -> Vec<Token> {
         let mut tokens = Vec::new();
         while let Some(token) = self.get_next_token() {
@@ -203,6 +204,7 @@ impl<'a> Lexer<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[test]
     fn parse_number() {
         let input = String::from("1");

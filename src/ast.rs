@@ -1,580 +1,230 @@
-use std::fmt::Debug;
-use std::any::Any;
-use std::rc::Rc;
+use std::fmt::{Write, Debug, Display};
 
-use crate::evaluator::{self, GabrEnv, GabrValue};
-use crate::lexer::Token;
+use crate::lexer::{Token, TOKENTYPE};
 
-pub trait Node {
-    fn token_literal(&self) -> String;
-    fn as_any(&self) -> &dyn Any;
-    fn to_string(&self) -> String;
-    fn eval(&self, env: &mut GabrEnv) -> Result<GabrValue, String>;
+#[derive(Debug, Clone, PartialEq)]
+pub enum Statement {
+    Expression(Expression),
+    Let {
+        ident: String,
+        expression: Expression
+    },
+    Assign {
+        assignable: Assignable,
+        expression: Expression
+    },
+    If {
+        cond: Expression,
+        body: Vec<Self>,
+        r#else: Option<Vec<Self>>
+    },
+    While {
+        cond: Expression,
+        body: Vec<Self>
+    },
+    Return(Option<Expression>),
+    FuncDecl(Function)
 }
 
-pub trait Statement : Node + Debug {}
-
-pub trait Expression : Node + Debug {}
-
-#[derive(Debug)]
-pub struct Program {
-    pub statements: Vec<Rc<dyn Statement>>,
-}
-
-impl Node for Program {
-    fn token_literal(&self) -> String {
-        match &self.statements.get(0) {
-            Some(statement) => statement.token_literal(),
-            None => String::from("")
-        }
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn to_string(&self) -> String {
-        let mut output = String::new();
-        for statement in self.statements.iter() {
-            output.push_str(&statement.to_string())
-        }
-        output
-    }
-
-    fn eval(&self, env: &mut GabrEnv) -> Result<GabrValue, String> {
-        evaluator::eval_program(env, self)
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct CodeBlock {
-    pub open_token: Token,
-    pub close_token: Token,
-    pub statements: Vec<Rc<dyn Statement>>
-}
-
-impl Node for CodeBlock {
-    fn token_literal(&self) -> String {
-        let mut literal = String::from(&self.open_token.literal);
-        literal.push_str(&self.close_token.literal);
-        literal
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn to_string(&self) -> String {
-        let mut output = String::from("{\n");
-        for statement in self.statements.iter() {
-            output.push_str("    ");
-            output.push_str(&statement.to_string());
-        }
-        output.push_str("}\n");
-        output
-    }
-
-    fn eval(&self, env: &mut GabrEnv) -> Result<GabrValue, String> {
-        evaluator::eval_codeblock(env, self)
-    }
-}
-
-impl Statement for CodeBlock {}
-
-#[derive(Debug)]
-pub struct InfixExpression {
-    pub token: Token,
-    pub op1: Box<dyn Expression>,
-    pub op2: Box<dyn Expression>
-}
-
-impl Node for InfixExpression {
-    fn token_literal(&self) -> String {
-        self.token.literal.clone()
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn to_string(&self) -> String {
-        let mut output = String::from('(');
-        output.push_str(&self.op1.to_string());
-        output.push(' ');
-        output.push_str(&self.token_literal());
-        output.push(' ');
-        output.push_str(&self.op2.to_string());
-        output.push(')');
-        output
-    }
-
-    fn eval(&self, env: &mut GabrEnv) -> Result<GabrValue, String> {
-        evaluator::eval_infix(env, self)
-    }
-}
-
-impl Expression for InfixExpression {}
-
-#[derive(Debug)]
-pub struct GroupExpression {
-    pub open_token: Token,
-    pub close_token: Token,
-    pub expression: Box<dyn Expression>
-}
-
-impl Node for GroupExpression {
-    fn token_literal(&self) -> String {
-        let mut literal = String::from(&self.open_token.literal);
-        literal.push_str(&self.close_token.literal);
-        literal
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn to_string(&self) -> String {
-        let mut output = String::from('(');
-        output.push_str(&self.expression.to_string());
-        output.push(')');
-        output
-    }
-
-    fn eval(&self, env: &mut GabrEnv) -> Result<GabrValue, String> {
-        self.expression.eval(env)
-    }
-}
-
-impl Expression for GroupExpression {}
-
-#[derive(Debug)]
-pub struct ExpressionStatement {
-    pub expression: Box<dyn Expression>
-}
-
-impl Node for ExpressionStatement {
-    fn token_literal(&self) -> String {
-        self.expression.token_literal()
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn to_string(&self) -> String {
-        let mut output = self.expression.to_string();
-        output.push(';');
-        output
-    }
-
-    fn eval(&self, env: &mut GabrEnv) -> Result<GabrValue, String> {
-        self.expression.eval(env)
-    }
-}
-
-impl Statement for ExpressionStatement {}
-
-#[derive(Debug)]
-pub struct LetStatement {
-    pub token: Token,
-    pub identifier: Identifier,
-    pub expression: Box<dyn Expression>
-}
-
-impl Node for LetStatement {
-    fn token_literal(&self) -> String {
-        self.token.literal.clone()
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn to_string(&self) -> String {
-        let mut output = self.token_literal();
-        output.push(' ');
-        output.push_str(&self.identifier.to_string());
-        output.push_str(" = ");
-        output.push_str(&self.expression.to_string());
-        output.push_str(";\n");
-        output
-    }
-
-    fn eval(&self, env: &mut GabrEnv) -> Result<GabrValue, String> {
-        evaluator::eval_let_statement(env, self)
-    }
-}
-
-impl Statement for LetStatement {}
-
-#[derive(Debug)]
-pub struct AssignStatement {
-    pub ident: Identifier,
-    pub expression: Box<dyn Expression>
-}
-
-impl Node for AssignStatement {
-    fn token_literal(&self) -> String {
-        self.ident.token_literal()
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn to_string(&self) -> String {
-        let mut output = self.ident.to_string();
-        output.push_str(" = ");
-        output.push_str(&self.expression.to_string());
-        output
-    }
-
-    fn eval(&self, env: &mut GabrEnv) -> Result<GabrValue, String> {
-        evaluator::eval_assign_statement(env, self)
-    }
-}
-
-impl Statement for AssignStatement {}
-
-#[derive(Debug)]
-pub struct WhileLoop {
-    pub token: Token,
-    pub condition: Box<dyn Expression>,
-    pub body: CodeBlock
-}
-
-impl Node for WhileLoop {
-    fn token_literal(&self) -> String {
-        self.token.literal.clone()
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn to_string(&self) -> String {
-        let mut output = self.token_literal();
-        output.push_str(&self.condition.to_string());
-        output.push(' ');
-        output.push_str(&self.body.to_string());
-        output
-    }
-
-    fn eval(&self, env: &mut GabrEnv) -> Result<GabrValue, String> {
-        evaluator::eval_while_loop(env, self)
-    }
-}
-
-impl Statement for WhileLoop {}
-
-#[derive(Debug)]
-pub struct IfStatement {
-    pub token: Token,
-    pub condition: Box<dyn Expression>,
-    pub then_block: CodeBlock,
-    pub else_block: Option<CodeBlock>
-}
-
-impl Node for IfStatement {
-    fn token_literal(&self) -> String {
-        self.token.literal.clone()
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn to_string(&self) -> String {
-        let mut output = self.token_literal();
-        output.push('(');
-        output.push_str(&self.condition.to_string());
-        output.push_str(") ");
-        output.push_str(&self.then_block.to_string());
-        if let Some(else_block) = self.else_block.as_ref() {
-            output.push_str("else ");
-            output.push_str(&else_block.to_string());
-        }
-        output
-    }
-
-    fn eval(&self, env: &mut GabrEnv) -> Result<GabrValue, String> {
-        evaluator::eval_if_statement(env, self)
-    }
-}
-
-impl Statement for IfStatement {}
-
-#[derive(Debug)]
-pub struct ReturnStatement {
-    pub token: Token,
-    pub return_value: Option<Box<dyn Expression>>
-}
-
-impl Node for ReturnStatement {
-    fn token_literal(&self) -> String {
-        self.token.literal.clone()
-    }
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-    fn to_string(&self) -> String {
-        let mut output = self.token_literal();
-        if let Some(return_value) = &self.return_value {
-            output.push(' ');
-            output.push_str(&return_value.to_string());
-        }
-        output.push_str(";\n");
-        output
-    }
-
-    fn eval(&self, env: &mut GabrEnv) -> Result<GabrValue, String> {
-        evaluator::eval_return_statement(env, self)
-    }
-}
-
-impl Statement for ReturnStatement {}
-
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Function {
-    pub token: Token,
-    pub ident: Identifier,
-    pub params: Vec<Identifier>,
-    pub body: CodeBlock
+    pub ident: String,
+    pub params: Vec<String>,
+    pub body: Vec<Statement>
 }
 
-impl Node for Function {
-    fn token_literal(&self) -> String {
-        self.token.literal.clone()
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn to_string(&self) -> String {
-        let mut output = self.token_literal();
-        output.push(' ');
-        output.push_str(&self.ident.to_string());
-        output.push('(');
-        output.push_str(&self.params.iter().map(|v| v.to_string()).collect::<Vec<String>>().join(", "));
-        output.push_str(") ");
-        output.push_str(&self.body.to_string());
-        output
-    }
-
-    fn eval(&self, env: &mut GabrEnv) -> Result<GabrValue, String> {
-        evaluator::eval_function(env, self)
+impl Display for Function {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}({}) {{{}}}", &self.ident, join(&self.params, ", "), join(&self.body, " "))
     }
 }
 
-impl Statement for Function {}
-
-#[derive(Debug)]
-pub struct FunctionCall {
-    pub ident: Identifier,
-    pub params: Vec<Box<dyn Expression>>
+#[derive(Debug, Clone, PartialEq)]
+pub enum Expression {
+    Prefix {
+        op: PrefixOp,
+        expression: Box<Self>,
+    },
+    Infix {
+        op: InfixOp,
+        left: Box<Self>,
+        right: Box<Self>
+    },
+    Group(Box<Self>),
+    FuncCall {
+        func: Assignable,
+        params: Vec<Self>
+    },
+    Assignable(Assignable),
+    Literal(Literal)
 }
 
-impl Node for FunctionCall {
-    fn token_literal(&self) -> String {
-        self.ident.token_literal()
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn to_string(&self) -> String {
-        let mut output = self.token_literal();
-        output.push('(');
-        output.push_str(&self.params.iter().map(|v| v.to_string()).collect::<Vec<String>>().join(", "));
-        output.push(')');
-        output
-    }
-
-    fn eval(&self, env: &mut GabrEnv) -> Result<GabrValue, String> {
-        evaluator::eval_function_call(env, self)
-    }
+#[derive(Debug, Clone, PartialEq)]
+pub enum Assignable {
+    Var(String),
+    ArrayIndex {
+        array: Box<Self>,
+        index: Box<Expression>
+    },
+    ObjectProp {
+        obj: Box<Self>,
+        prop: String
+    },
 }
 
-impl Expression for FunctionCall {}
 
-#[derive(Debug, Clone)]
-pub struct Identifier {
-    pub token: Token,
-    pub name: String,
+#[derive(Debug, Clone, PartialEq)]
+pub enum Literal {
+    ArrayLit(Vec<Box<Expression>>),
+    ObjectLit(Vec<(String, Box<Expression>)>),
+    NumberLit(i64),
 }
 
-impl Node for Identifier {
-    fn token_literal(&self) -> String {
-        self.token.literal.clone()
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn to_string(&self) -> String {
-        self.name.clone()
-    }
-
-    fn eval(&self, env: &mut GabrEnv) -> Result<GabrValue, String> {
-        evaluator::eval_identifier(env, self)
-    }
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum PrefixOp {
+    Neg,
+    Bang
 }
 
-impl Expression for Identifier {}
-
-#[derive(Debug)]
-pub struct ArrayLiteral {
-    pub open_token: Token,
-    pub close_token: Token,
-    pub values: Vec<Box<dyn Expression>>
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum InfixOp {
+    Add,
+    Sub,
+    Mult,
+    Div,
+    Lt,
+    Gt,
+    Eq,
+    NotEq
 }
 
-impl Node for ArrayLiteral {
-    fn token_literal(&self) -> String {
-        self.open_token.literal.clone()
-    }
+impl TryFrom<Token> for InfixOp {
+    type Error = String;
 
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn to_string(&self) -> String {
-        let mut output = self.open_token.literal.clone();
-        output.push_str(&self.values.iter().map(|v| v.to_string()).collect::<Vec<String>>().join(", "));
-        output.push_str(&self.close_token.literal.clone());
-        output
-    }
-
-    fn eval(&self, env: &mut GabrEnv) -> Result<GabrValue, String> {
-        evaluator::eval_array_literal(env, self)
+    fn try_from(value: Token) -> Result<Self, Self::Error> {
+        match value.token_type {
+            TOKENTYPE::PLUS => Ok(Self::Add),
+            TOKENTYPE::MINUS => Ok(Self::Sub),
+            TOKENTYPE::ASTERISK => Ok(Self::Mult),
+            TOKENTYPE::SLASH => Ok(Self::Div),
+            TOKENTYPE::LT => Ok(Self::Lt),
+            TOKENTYPE::GT => Ok(Self::Gt),
+            TOKENTYPE::EQ => Ok(Self::Eq),
+            TOKENTYPE::NOTEQ => Ok(Self::NotEq),
+            _ => Err(String::from("Token is not a valid infix operator"))
+        }
     }
 }
 
-impl Expression for ArrayLiteral {}
-
-#[derive(Debug)]
-pub struct ObjectLiteral {
-    pub open_token: Token,
-    pub close_token: Token,
-    pub fields: Vec<(Identifier, Box<dyn Expression>)>
-}
-
-impl Node for ObjectLiteral {
-    fn token_literal(&self) -> String {
-        let mut output = self.open_token.literal.clone();
-        output.push_str(&self.close_token.literal.clone());
-        output
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn to_string(&self) -> String {
-        let mut output = self.open_token.literal.clone();
-        output.push_str(
-            &self.fields.iter().map(|(ident, value)| {
-                let mut output = ident.name.clone();
-                output.push_str(": ");
-                output.push_str(&value.to_string());
-                output
-            }).collect::<Vec<String>>().join(" ")
-        );
-        output.push_str(&self.close_token.literal.clone());
-        output
-    }
-
-    fn eval(&self, env: &mut GabrEnv) -> Result<GabrValue, String> {
-        evaluator::eval_object_literal(env, self)
+impl Display for PrefixOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Neg => write!(f, "-"),
+            Self::Bang => write!(f, "!")
+        }
     }
 }
 
-impl Expression for ObjectLiteral {}
-
-#[derive(Debug)]
-pub struct ArrayIndex {
-    pub ident: Identifier,
-    pub index: Box<dyn Expression>
-}
-
-impl Node for ArrayIndex {
-    fn token_literal(&self) -> String {
-        self.ident.token_literal()
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn to_string(&self) -> String {
-        let mut output = self.ident.to_string();
-        output.push('[');
-        output.push_str(&self.index.to_string());
-        output.push(']');
-        output
-    }
-
-    fn eval(&self, env: &mut GabrEnv) -> Result<GabrValue, String> {
-        evaluator::eval_array_index(env, self)
+impl Display for InfixOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Add => f.write_char('+'),
+            Self::Sub => f.write_char('-'),
+            Self::Mult => f.write_char('*'),
+            Self::Div => f.write_char('/'),
+            Self::Lt => f.write_char('<'),
+            Self::Gt => f.write_char('>'),
+            Self::Eq => f.write_str("=="),
+            Self::NotEq => f.write_str("!=")
+        }
     }
 }
 
-impl Expression for ArrayIndex {}
-
-#[derive(Debug)]
-pub struct ObjectProperty {
-    pub ident: Identifier,
-    pub property: Identifier
-}
-
-impl Node for ObjectProperty {
-    fn token_literal(&self) -> String {
-        self.ident.token_literal()
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn to_string(&self) -> String {
-        let mut output = self.ident.to_string();
-        output.push('.');
-        output.push_str(&self.property.to_string());
-        output
-    }
-
-    fn eval(&self, env: &mut GabrEnv) -> Result<GabrValue, String> {
-        evaluator::eval_object_property(env, self)
+impl Display for Literal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NumberLit(num) => write!(f, "{num}"),
+            Self::ArrayLit(arr) => {
+                write!(f, "[{}]", join(arr, ", "))
+            },
+            Self::ObjectLit(obj) => {
+                let obj = obj.iter().map(|(ident, value)| {
+                    let mut output = ident.clone();
+                    output.push_str(": ");
+                    output.push_str(&value.to_string());
+                    output
+                }).collect::<Vec<String>>().join(", ");
+                write!(f, "{{{obj}}}")
+            }
+        }
     }
 }
 
-impl Expression for ObjectProperty {}
-
-#[derive(Debug)]
-pub struct Number {
-    pub token: Token,
-    pub value: i64
-}
-
-impl Node for Number {
-    fn token_literal(&self) -> String {
-        self.token.literal.clone()
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn to_string(&self) -> String {
-        self.value.to_string()
-    }
-
-    fn eval(&self, _: &mut GabrEnv) -> Result<GabrValue, String> {
-        evaluator::eval_number_literal(self)
+impl Display for Assignable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Var(var) => write!(f, "{var}"),
+            Self::ArrayIndex { array, index } => write!(f, "{array}[{index}]"),
+            Self::ObjectProp { obj, prop } => write!(f, "{obj}.{prop}")
+        }
     }
 }
 
-impl Expression for Number {}
+impl Display for Expression {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Prefix { op, expression } => write!(f, "{op}{expression}"),
+            Self::Infix { op, left, right } => write!(f, "({left} {op} {right})"),
+            Self::Group(exp) => write!(f, "({exp})"),
+            Self::FuncCall { func, params } => {
+                write!(f, "{func}({})", join(params, ", "))
+            },
+            Self::Assignable(assignable) => write!(f, "{assignable}"),
+            Self::Literal(lit) => write!(f, "{lit}")
+        }
+    }
+}
+
+impl Display for Statement {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Expression(e) => write!(f, "{e}"),
+            Self::Let { ident, expression } => write!(f, "let {ident} = {expression};"),
+            Self::Assign { assignable, expression } => write!(f, "{assignable} = {expression};"),
+            Self::Return(value) => {
+                match value {
+                    Some(value) => write!(f, "return {value};"),
+                    None => write!(f, "return;"),
+                }
+            },
+            Self::If { cond, body, r#else } => {
+                let body = join(body, " ");
+                write!(f, "if {cond} {{{body}}}")?;
+                if let Some(block) = r#else {
+                    write!(f, " else {}", join(block, " "))?;
+                }
+                Ok(())
+            },
+            Self::While { cond, body } => write!(f, "while {cond} {{{}}}", join(body, " ")),
+            Self::FuncDecl(func) => {
+                write!(f, "{func}")
+            }
+        }
+    }
+}
+
+// Lowkey ripped from AntonioSarosi MKDB
+pub fn join<'t, T: std::fmt::Display + 't>(vals: impl IntoIterator<Item = &'t T>, separator: &str) -> String {
+    // Init output string
+    let mut output = String::new();
+    let mut vals = vals.into_iter();
+    // Print first val in iterator without seperator
+    if let Some(val) =  vals.next() {
+        write!(output, "{}", &val).unwrap();
+    };
+    // all other values are prefixed with the seperator
+    for val in vals {
+        write!(output, "{separator}{val}").unwrap();
+    }
+    output
+}

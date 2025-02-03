@@ -1,7 +1,7 @@
 use std::rc::Rc;
 use std::collections::HashMap;
 
-use crate::evaluator::{GabrEnv, GabrValue, ObjectType};
+use crate::evaluator::{GabrEnv, ObjectType};
 
 pub fn load_built_ins() -> HashMap<String, Rc<dyn BuiltIn>> {
     let mut hash_map = HashMap::new();
@@ -11,7 +11,7 @@ pub fn load_built_ins() -> HashMap<String, Rc<dyn BuiltIn>> {
 
 pub trait BuiltIn {
     fn get_params(&self) -> Vec<String>;
-    fn eval(&self, env: &mut GabrEnv) -> Result<GabrValue, String>;
+    fn eval(&self, env: &mut GabrEnv) -> Result<ObjectType, String>;
     fn as_built_in(self) -> Rc<dyn BuiltIn>;
 }
 
@@ -24,20 +24,17 @@ impl BuiltIn for Len {
         ]
     }
 
-    fn eval(&self, env: &mut GabrEnv) -> Result<GabrValue, String> {
-        let arr = env.get_var("_arr".to_string());
+    fn eval(&self, env: &mut GabrEnv) -> Result<ObjectType, String> {
+        let arr = env.get_var("_arr");
         match arr {
             Some(arr) => {
-                if let ObjectType::ARRAY(arr) = arr.gabr_object.clone() {
-                    Ok(GabrValue {
-                        gabr_object: ObjectType::NUMBER(arr.len() as i64),
-                        returning: false
-                    })
+                if let ObjectType::ARRAY(arr) = arr.clone() {
+                    Ok(ObjectType::NUMBER(arr.len() as i64))
                 } else {
-                    Err("built in function \"len\" expected array value as argument".to_string())
+                    Err("Built-In \"len\" expected array value as argument".to_string())
                 }
             },
-            None => Err("Array not provided to built in function \"len\"".to_string())
+            None => Err("Built-In \"len\" expected did not recieve expected arg \"_arr\"".to_string())
         }
     }
 

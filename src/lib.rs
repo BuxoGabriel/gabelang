@@ -8,7 +8,6 @@ mod evaluator;
 
 use evaluator::GabrEnv;
 use parser::Parser;
-use ast::Node;
 
 pub struct Config {
     flags: HashMap<String, String>
@@ -47,10 +46,8 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
             Ok(program) => {
                 println!("parsing complete! Running {}", &file_name);
                 let mut env = GabrEnv::new();
-                let res = program.eval(&mut env)?;
-                if let Some(res) =  res.to_string() {
-                    println!("{res}");
-                }
+                let res = env.eval_program(&program)?;
+                println!("{res}");
             },
             Err(e) => println!("{e}"),
         };
