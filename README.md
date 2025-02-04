@@ -9,20 +9,25 @@ The *Writing an Interpreter in Go* book by Thorsten Ball was used as a reference
 
 ```bnf
 <program> = <statement> | <program> <statement>
-<statement> = <let_statement> | <if_statement> | <while_loop> | <function>
+<statement> = <let_statement> | <if_statement> | <while_loop> | <func_decl> | <expression>
 <let_statement> = let <identifier> = <expression>;
+<assign_statement> = <assignable> = <expression>;
 <if_statement> = if <expression> <code_block>
 <while_loop> = while <expression> <code_block>
-<function> = fn <identifier> <parameters> <codeblock>
+<func_decl> = fn <identifier> <param_idents> <codeblock>
 <code_block> = {<program>}
-<parameters> = (<_parameters>)
-<_parameters> = <identifier> | <_parameters>, <_parameters>
-<identifier> = <ALPHACHAR> | <ident_char><identifier>
+<param_idents> = (<_param_idents>)
+<_param_idents> = <identifier> | <_param_idents>, <_param_idents>
+<identifier> = <ident_char> | <ident_char><identifier>
 <indent_char> = <ALPHACHAR> | _
-<expression> = <group_expression> | <operation_expression> | <object_literal> | <array_literal>  | <number_literal> 
+<expression> = <group_expression> | <operation_expression> | <assignable> | <func_call> | <object_literal> | <array_literal>  | <number_literal>
 <group_expression> = (<expression>)
 <operation_expression> = <expression> <op> <expression>
 <op> = + | - | * | /
+<assignable> = <identifier> | <array_index> | <object_prop>
+<array_index> = <assignable>[<expression>]
+<object_prop> = <assignable>.<identifier>
+<func_call> = <assignable>(<expression_list>)
 <object_literal> = {<object_field_literals>}
 <object_field_literals> = <identifier>: <expression> | <object_field_literals>, <object_field_literals>
 <array_literal> = [<expression_list>]
@@ -66,7 +71,6 @@ cargo test
 
 ## Todo
 
-- object property parsing and evaluation
 - Built in Functions
 - Add tests to ast and eval modules
 - Make repl nicer to use
@@ -77,4 +81,4 @@ cargo test
 
 - Add bytecode compiler
 - Create VM that can run bytecode
-- Compile to/through c
+- Compile to/through C, NASM, or MIPS
