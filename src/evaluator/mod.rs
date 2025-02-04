@@ -489,7 +489,7 @@ impl Display for ObjectType {
             Self::OBJECT(obj) => {
                 let properties = obj.iter().map(|(key, val)| {
                     let mut output = String::new();
-                    write!(output, "\t{key}: {val}");
+                    write!(output, "\t{key}: {val}").unwrap();
                     output
                 }).collect::<Vec<String>>();
                 write!(f, "{{\n{}\n}}", join(&properties, "\n"))
