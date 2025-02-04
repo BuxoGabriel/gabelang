@@ -452,6 +452,14 @@ impl GabrValue {
     fn new(gabr_object: ObjectType, returning: bool) -> Self {
         Self { gabr_object, returning }
     }
+
+    pub fn is_some(&self) -> bool {
+        if let ObjectType::NULL = self.gabr_object {
+            false
+        } else {
+            true
+        }
+    }
 }
 
 impl Display for GabrValue {

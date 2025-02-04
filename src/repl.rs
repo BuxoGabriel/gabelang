@@ -16,12 +16,17 @@ pub fn start() {
                 continue;
             }
         };
-        
-        match env.eval_statement(&program[0]) {
-            Ok(object) => {
-                println!("{object}");
-            },
-            Err(err) => println!("{err}")
-        };
+        if program.len() == 1 {
+            match env.eval_statement(&program[0]) {
+                Ok(object) => {
+                    if object.is_some() {
+                        println!("{object}");
+                    }
+                },
+                Err(err) => println!("{err}")
+            };
+        }
+        print!(">>");
+        io::stdout().flush().unwrap();
     }
 }

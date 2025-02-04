@@ -69,7 +69,11 @@ impl<'a> Parser<'a> {
                 let assignable = self.parse_assignable()?;
                 if self.current_token_is(TOKENTYPE::EQUAL) {
                     Ok(self.parse_assign_statement(assignable)?)
-                } else {
+                } else if self.current_token_is(TOKENTYPE::LPAREN) {
+                    Ok(ast::Statement::Expression(
+                        self.parse_function_call(assignable)?
+                    ))
+                }else {
                     Ok(ast::Statement::Expression(
                         ast::Expression::Assignable(assignable)
                     ))
