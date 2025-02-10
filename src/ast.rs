@@ -98,8 +98,10 @@ pub enum InfixOp {
     NotEq
 }
 
+pub struct TokenNotInfixOp(pub TOKENTYPE);
+
 impl TryFrom<Token> for InfixOp {
-    type Error = String;
+    type Error = TokenNotInfixOp;
 
     fn try_from(value: Token) -> Result<Self, Self::Error> {
         match value.token_type {
@@ -111,7 +113,7 @@ impl TryFrom<Token> for InfixOp {
             TOKENTYPE::GT => Ok(Self::Gt),
             TOKENTYPE::EQ => Ok(Self::Eq),
             TOKENTYPE::NOTEQ => Ok(Self::NotEq),
-            _ => Err(String::from("Token is not a valid infix operator"))
+            _ => Err(TokenNotInfixOp(value.token_type))
         }
     }
 }

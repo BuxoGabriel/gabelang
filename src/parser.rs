@@ -1,9 +1,65 @@
-use crate::{ast, lexer::{Lexer, Token, TOKENTYPE}};
+use std::{fmt::Display, num::ParseIntError};
+
+use crate::{ast::{self, join}, lexer::{Lexer, Location, Token, TOKENTYPE}};
+
+#[derive(PartialEq, Debug)]
+enum ParserErrorType {
+    UnexpectedToken {
+        expected_token: TOKENTYPE,
+        recieved_token: TOKENTYPE,
+    },
+    UnexpectedTokenOption {
+        expected_token_options: Vec<TOKENTYPE>,
+        recieved_token: TOKENTYPE
+    },
+    TokenNotInfixOp(TOKENTYPE),
+    ParseIntError(ParseIntError),
+    UnexpectedEOF
+}
+
+impl From<ast::TokenNotInfixOp> for ParserErrorType {
+    fn from(err: ast::TokenNotInfixOp) -> Self {
+        Self::TokenNotInfixOp(err.0)
+    }
+}
+
+impl From<ParseIntError> for ParserErrorType {
+    fn from(err: ParseIntError) -> Self {
+        Self::ParseIntError(err)
+    }
+}
+
+impl Display for ParserErrorType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::UnexpectedEOF => f.write_str("Unexpected end of file"),
+            Self::TokenNotInfixOp(token) => write!(f, "Could not translate token {} to Infix Operand", token),
+            Self::ParseIntError(err) => write!(f, "Error parsing number: {}", err),
+            Self::UnexpectedToken { expected_token, recieved_token } => write!(f, "Expected token {}, found {}", expected_token, recieved_token),
+            Self::UnexpectedTokenOption { expected_token_options, recieved_token } => write!(f, "Expected one of the following tokens [{}], found {}", join(expected_token_options, ", "), recieved_token)
+        }
+    }
+}
+
+#[derive(PartialEq, Debug)]
+pub struct ParserError {
+    error_type: ParserErrorType,
+    location: Location
+}
+
+impl Display for ParserError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Parser Error at line {} column {}: {}", self.location.line, self.location.position, self.error_type)
+    }
+}
+
+type ParseResult<T> = Result<T, ParserError>;
 
 pub struct Parser<'a> {
     lexer: Lexer<'a>,
     current_token: Option<Token>,
-    peek_token: Option<Token>
+    peek_token: Option<Token>,
+    location: Location
 }
 
 impl<'a> Parser<'a> {
@@ -12,24 +68,24 @@ impl<'a> Parser<'a> {
         Self {
             lexer,
             current_token: None,
-            peek_token: None
+            peek_token: None,
+            location: Location::default()
         }
     }
 
     fn next_token(&mut self) {
         self.current_token = self.peek_token.take();
         self.peek_token = self.lexer.get_next_token();
+        if self.current_token.is_some() {
+            self.location = self.current_token.as_ref().unwrap().location.clone();
+        }
     }
 
     fn current_token_is(&self, token_type: TOKENTYPE) -> bool {
         self.current_token.is_some() && self.current_token.as_ref().unwrap().token_type == token_type
     }
 
-    fn peek_token_is(&self, token_type: TOKENTYPE) -> bool {
-        self.peek_token.is_some() && self.peek_token.as_ref().unwrap().token_type == token_type
-    }
-
-    pub fn parse_program(&mut self) -> Result<Vec<ast::Statement>, String> {
+    pub fn parse_program(&mut self) -> ParseResult<Vec<ast::Statement>> {
         self.next_token();
         self.next_token();
         let mut statements: Vec<ast::Statement> = Vec::new();
@@ -40,12 +96,9 @@ impl<'a> Parser<'a> {
     }
 
     // Precondition: Caller must only call this if the current token is an open squig
-    fn parse_block(&mut self) -> Result<Vec<ast::Statement>, String> {
-        // Assert that the current token is an if token
-        // Todo: compiler macro to remove asserts when building for production
-        assert_eq!(self.current_token.is_none(), false);
-        let open_token: Token = self.current_token.take().unwrap();
-        assert_eq!(open_token.token_type, TOKENTYPE::LSQUIG);
+    fn parse_block(&mut self) -> ParseResult<Vec<ast::Statement>> {
+        // Expect that the current token is an if token
+        self.expect_token(TOKENTYPE::LSQUIG)?;
         // Advance to statements
         self.next_token();
         let mut statements = Vec::new();
@@ -58,11 +111,13 @@ impl<'a> Parser<'a> {
                 statements.push(self.parse_statement()?);
             }
         }
-        Err(String::from("Code block was not closed, did you forget a \"}\""))
+        Err(self.error(ParserErrorType::UnexpectedToken { 
+            expected_token: TOKENTYPE::RSQUIG,
+            recieved_token: self.current_token.as_ref().unwrap().token_type.clone()
+        }))
     }
 
-
-    fn parse_statement(&mut self) -> Result<ast::Statement, String> {
+    fn parse_statement(&mut self) -> ParseResult<ast::Statement> {
         match self.current_token.as_ref().unwrap().token_type {
             TOKENTYPE::LET => Ok(self.parse_let_statement()?),
             TOKENTYPE::IDENTIFIER => {
@@ -87,40 +142,31 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_expression_statement(&mut self) -> Result<ast::Statement, String> {
+    fn parse_expression_statement(&mut self) -> ParseResult<ast::Statement> {
         let expression = self.parse_expression(0)?;
         Ok(ast::Statement::Expression(expression))
     }
+
     // Precondition: caller must check that current token is a let token
-    fn parse_let_statement(&mut self) -> Result<ast::Statement, String> {
-        // Assert that the current token is a let token
-        // Todo: compiler macro to remove asserts when building for production
-        assert_eq!(self.current_token.is_none(), false);
-        let let_token: Token = self.current_token.take().unwrap();
-        assert_eq!(let_token.token_type, TOKENTYPE::LET);
+    fn parse_let_statement(&mut self) -> ParseResult<ast::Statement> {
+        // Expect the current token to be a let token
+        self.expect_token(TOKENTYPE::LET)?;
         // Advance to identifier
         self.next_token();
         // If no token after let keyword or token after let keyword is not an identifier it is an invalid let statement
         if self.current_token.is_none() {
-            return Err(String::from("Let statement must have an identifier after keywork let"));
+            return Err(self.error(ParserErrorType::UnexpectedEOF));
         }
-        if self.current_token.as_ref().unwrap().token_type != TOKENTYPE::IDENTIFIER {
-            return Err(String::from("Let statement must have an identifier after keyword let"));
-        }
+        self.expect_token(TOKENTYPE::IDENTIFIER)?;
         // If no token after identifier or token after identifier is not an equal sign it is an invalid let statement
-        if !self.peek_token_is(TOKENTYPE::EQUAL) {
-            return Err(String::from("Let statement must have a \"=\" after variable name"));
-        }
+        self.expect_peek_token(TOKENTYPE::EQUAL)?;
         // Now that we know that parse identifier will not panic, i.e., it is followed by a token, we get the identifier token
-        let ident = self.parse_identifier();
+        let ident = self.parse_identifier()?;
         // Advance to expression / skip equal sign
         self.next_token();
         let expression = self.parse_expression(0)?;
-        if !self.current_token_is(TOKENTYPE::SEMICOLON) {
-            return Err(String::from("Let statement must end with a semicolon"));
-        } else {
-            self.next_token();
-        }
+        self.expect_token(TOKENTYPE::SEMICOLON)?;
+        self.next_token();
         Ok(ast::Statement::Let {
             ident,
             expression
@@ -128,18 +174,13 @@ impl<'a> Parser<'a> {
     }
 
     // Precondition: caller must ensure that current token is an equal token
-    fn parse_assign_statement(&mut self, assignable: ast::Assignable) -> Result<ast::Statement, String> {
-        if !self.current_token_is(TOKENTYPE::EQUAL) {
-            return Err(String::from("variable assignment must have a \"=\" after variable name"));
-        }
+    fn parse_assign_statement(&mut self, assignable: ast::Assignable) -> ParseResult<ast::Statement> {
+        self.expect_token(TOKENTYPE::EQUAL)?;
         // Move on to expression
         self.next_token();
         let expression = self.parse_expression(0)?;
-        if !self.current_token_is(TOKENTYPE::SEMICOLON) {
-            return Err(format!("Variable assignment must end with a semicolon, ended with {:?}", self.current_token));
-        } else {
-            self.next_token();
-        }
+        self.expect_token(TOKENTYPE::SEMICOLON)?;
+        self.next_token();
         Ok(ast::Statement::Assign {
             assignable,
             expression
@@ -147,10 +188,9 @@ impl<'a> Parser<'a> {
     }
 
     // Precondition: Caller must only call this if the current token is a while token
-    fn parse_while_loop(&mut self) -> Result<ast::Statement, String> {
-        // Assert that the current token is a while token
-        assert!(self.current_token_is(TOKENTYPE::WHILE));
-        // let token: Token = self.current_token.take().unwrap();
+    fn parse_while_loop(&mut self) -> ParseResult<ast::Statement> {
+        // Expect that the current token is a while token
+        self.expect_token(TOKENTYPE::WHILE)?;
         // Advance to expression to validate
         self.next_token();
         let cond = self.parse_expression(0)?;
@@ -162,10 +202,9 @@ impl<'a> Parser<'a> {
     }
 
     // Precondition: Caller must only call this if the current token is an if token
-    fn parse_if_statement(&mut self) -> Result<ast::Statement, String> {
-        // Assert that the current token is an if token
-        assert!(self.current_token_is(TOKENTYPE::IF));
-        // let if_token: Token = self.current_token.take().unwrap();
+    fn parse_if_statement(&mut self) -> ParseResult<ast::Statement> {
+        // Expect that the current token is an if token
+        self.expect_token(TOKENTYPE::IF)?;
         // Advance to expression to validate
         self.next_token();
         let cond = self.parse_expression(0)?;
@@ -184,62 +223,48 @@ impl<'a> Parser<'a> {
     }
 
     // Precondition: Caller must only call this if the current token is a return token
-    fn parse_return_statement(&mut self) -> Result<ast::Statement, String> {
-        assert!(self.current_token_is(TOKENTYPE::RETURN));
-        // let token = self.current_token.take().unwrap();
+    fn parse_return_statement(&mut self) -> ParseResult<ast::Statement> {
+        // Expect current token to be return
+        self.expect_token(TOKENTYPE::RETURN)?;
         self.next_token();
         if self.current_token.is_none() {
-            return Err(String::from("Invalid return statement: return can not be the last token, did you forget a semicolon"));
+            return Err(self.error(ParserErrorType::UnexpectedEOF));
         }
         let return_value = if self.current_token_is(TOKENTYPE::SEMICOLON) {
             None
         } else {
             Some(self.parse_expression(0)?)
         };
-        if !self.current_token_is(TOKENTYPE::SEMICOLON) {
-            return Err("Invalid return statement: expected semicolon".to_string()); 
-        } else {
-            self.next_token();
-        }
+        self.expect_token(TOKENTYPE::SEMICOLON)?;
+        self.next_token();
         Ok(ast::Statement::Return(return_value))
     }
 
     // Precondition: Caller must only call this if the current token is an if token
-    fn parse_function(&mut self) -> Result<ast::Statement, String> {
-        // Ensure parse function was not called while token is not fn
-        assert!(self.current_token.is_some());
-        assert_eq!(self.current_token.as_ref().unwrap().token_type, TOKENTYPE::FN);
-        // Get fn token
-        // let token = self.current_token.take().unwrap();
+    fn parse_function(&mut self) -> ParseResult<ast::Statement> {
+        // Expect current token to be fn 
+        self.expect_token(TOKENTYPE::FN)?;
         // Move on to function Identifier
         self.next_token();
-        if self.current_token.is_none() || self.current_token.as_ref().unwrap().token_type != TOKENTYPE::IDENTIFIER {
-            return Err("Invalid Function: function must have an identifier before parameters".to_string());
-        }
-        let ident = self.parse_identifier();
+        self.expect_token(TOKENTYPE::IDENTIFIER)?;
+        let ident = self.parse_identifier()?;
         // Expect an open parenthesis before parameters after function name
-        if self.current_token.is_none() || self.current_token.as_ref().unwrap().token_type != TOKENTYPE::LPAREN {
-            return Err("Invalid Function: function must have an open parenthesis after identifier".to_string());
-        }
+        self.expect_token(TOKENTYPE::LPAREN)?;
         // Move on to parameters
         self.next_token();
         let mut params = Vec::new();
         while self.current_token_is(TOKENTYPE::IDENTIFIER) {
-            params.push(self.parse_identifier());
+            params.push(self.parse_identifier()?);
             if self.current_token_is(TOKENTYPE::COMMA) {
                 self.next_token()
             } else {
                 break
             }
         }
-        if !self.current_token_is(TOKENTYPE::RPAREN) {
-            return Err(format!("Invalid function: Invalid function parameter or function closed improperly, found token: {:?}", self.current_token));
-        }
-        // Move on to then block
+        self.expect_token(TOKENTYPE::RPAREN)?;
+        // Parse function body
         self.next_token();
-        if !self.current_token_is(TOKENTYPE::LSQUIG) {
-            return Err("Invalid function: Expected code block after parameters".to_string());
-        }
+        self.expect_token(TOKENTYPE::LSQUIG)?;
         let body = self.parse_block()?;
         Ok(ast::Statement::FuncDecl(ast::Function{
             ident,
@@ -250,12 +275,13 @@ impl<'a> Parser<'a> {
 
     // Precondition: Caller must make sure that current token is an identifier and that the
     // next token is an open parenthesis
-    fn parse_function_call(&mut self, func: ast::Assignable) -> Result<ast::Expression, String> {
-        assert!(self.current_token_is(TOKENTYPE::LPAREN));
+    fn parse_function_call(&mut self, func: ast::Assignable) -> ParseResult<ast::Expression> {
+        // Expect current tokent to be lparen
+        self.expect_token(TOKENTYPE::LPAREN)?;
         // Move on to parameters
         self.next_token();
         let mut params: Vec<ast::Expression> = Vec::new();
-        while self.current_token.is_some() && !self.current_token_is(TOKENTYPE::RPAREN) {
+        while  self.current_token.is_some() && !self.current_token_is(TOKENTYPE::RPAREN) {
             params.push(self.parse_expression(0)?);
             if self.current_token_is(TOKENTYPE::COMMA) {
                 self.next_token()
@@ -264,21 +290,18 @@ impl<'a> Parser<'a> {
             }
         }
         // Param list should end with a close parenthesis otherwise it is an invalid function call
-        if self.current_token_is(TOKENTYPE::RPAREN) {
-            self.next_token();
-        } else {
-            return Err(format!("Invalid Function Call: Function call must end parameter list with a close parenthesis, ends with: {:?}", self.current_token));
-        }
+        self.expect_token(TOKENTYPE::RPAREN)?;
+        self.next_token();
         Ok(ast::Expression::FuncCall {
             func,
             params
         })
     }
 
-    fn parse_expression(&mut self, precidence: i8) -> Result<ast::Expression, String> {
+    fn parse_expression(&mut self, precidence: i8) -> ParseResult<ast::Expression> {
         // invalid expression if it is blank
         if self.current_token.is_none() {
-            return Err("Invalid Expression: Expression can not be empty".to_string());
+            return Err(self.error(ParserErrorType::UnexpectedEOF));
         }
         // Return group expression if expression starts with an open paren
         if self.current_token_is(TOKENTYPE::LPAREN) {
@@ -291,9 +314,7 @@ impl<'a> Parser<'a> {
         if self.current_token_is(TOKENTYPE::LSQUIG) {
             return Ok(ast::Expression::Literal(self.parse_object_literal()?))
         }
-        if !self.current_token_is(TOKENTYPE::NUMBER) && !self.current_token_is(TOKENTYPE::IDENTIFIER) {
-            return Err(format!("Invalid Expression: Expression must start with a literal or variable, started with: {:?}", self.current_token));
-        }
+        self.expect_one_of(vec![TOKENTYPE::NUMBER, TOKENTYPE::IDENTIFIER])?;
         // Get "left side" of the expression
         let mut left_side: ast::Expression = self.parse_prefix()?;
         while self.current_token.is_some() {
@@ -313,13 +334,10 @@ impl<'a> Parser<'a> {
     }
 
     // Parses infix expressions including literals and identifiers
-    fn parse_prefix(&mut self) -> Result<ast::Expression, String> {
-        let token = if self.current_token.is_some() {
-            self.current_token.as_ref().unwrap()
-        } else {
-            return Err("Invalid Expression: Expression must start with a literal or variable".to_string());
-        };
-        match token.token_type {
+    fn parse_prefix(&mut self) -> ParseResult<ast::Expression> {
+        // Expect prefix expression to start with an identifier, a minus, or a number
+        self.expect_one_of(vec![TOKENTYPE::IDENTIFIER, TOKENTYPE::MINUS, TOKENTYPE::NUMBER])?;
+        match self.current_token.as_ref().unwrap().token_type {
             TOKENTYPE::IDENTIFIER => {
                 let assignable = self.parse_assignable()?;
                 if self.current_token_is(TOKENTYPE::LPAREN) {
@@ -333,29 +351,36 @@ impl<'a> Parser<'a> {
                 if let ast::Literal::NumberLit(num) = number {
                     Ok(ast::Expression::Literal(ast::Literal::NumberLit(-num)))
                 } else {
-                    Err("Can not negate non number literal".to_string())
+                    unreachable!()
                 }
             }
             TOKENTYPE::NUMBER => Ok(ast::Expression::Literal(self.parse_number()?)),
-            _ => Err("Invalid Expression: Expression must start with a literal or variable".to_string())
+            _ => unreachable!()
         }
     }
 
     // Precondition: Caller must make sure this is called on an arithmetic token and provide left side of the equation as first parameter
-    fn parse_infix(&mut self, left:ast::Expression) -> Result<ast::Expression, String> {
+    fn parse_infix(&mut self, left:ast::Expression) -> ParseResult<ast::Expression> {
         let operand_token = self.current_token.take().unwrap();
         self.next_token();
         let precidence: i8 = Self::token_type_precedence(operand_token.token_type.clone());
         let right = self.parse_expression(precidence)?;
+        let op = match operand_token.try_into() {
+            Ok(op) => op,
+            Err(err) => {
+                let err: ast::TokenNotInfixOp = err;
+                return Err(self.error(err.into()));
+            }
+        };
         Ok(ast::Expression::Infix {
-            op: operand_token.try_into()?,
+            op,
             left: Box::new(left),
             right: Box::new(right)
         })
     }
 
-    fn parse_assignable(&mut self) -> Result<ast::Assignable, String> {
-        let mut assignable = ast::Assignable::Var(self.parse_identifier());
+    fn parse_assignable(&mut self) -> ParseResult<ast::Assignable> {
+        let mut assignable = ast::Assignable::Var(self.parse_identifier()?);
         while self.current_token.is_some() {
             match self.current_token.as_ref().unwrap().token_type {
                 TOKENTYPE::LSQR => {
@@ -364,9 +389,7 @@ impl<'a> Parser<'a> {
                     // Parse the index into the array
                     let index = Box::from(self.parse_expression(0)?);
                     // Array index is invalid if it is not closed
-                    if !self.current_token_is(TOKENTYPE::RSQR) {
-                        return Err("Array index expects to be closed with \"]\"".to_string());
-                    }
+                    self.expect_token(TOKENTYPE::RSQR)?;
                     // Skip past the right square bracket
                     self.next_token();
                     assignable = ast::Assignable::ArrayIndex {
@@ -378,7 +401,7 @@ impl<'a> Parser<'a> {
                     // Skip past the dot
                     self.next_token();
                     // Get the property
-                    let prop = self.parse_identifier();
+                    let prop = self.parse_identifier()?;
                     assignable = ast::Assignable::ObjectProp { 
                         obj: Box::from(assignable),
                         prop
@@ -391,21 +414,19 @@ impl<'a> Parser<'a> {
     }
 
     // Precondition: Caller must check that current_token is an identifier
-    fn parse_identifier(&mut self) -> String {
-        // Assert that the current token exists 
-        assert_eq!(self.current_token.is_none(), false);
+    fn parse_identifier(&mut self) -> ParseResult<String> {
+        // Expect the current token to be an identifier
+        self.expect_token(TOKENTYPE::IDENTIFIER)?;
         let identifier_token = self.current_token.take().unwrap();
-        assert_eq!(identifier_token.token_type, TOKENTYPE::IDENTIFIER);
         // Advance parser to next token
         self.next_token();
-        identifier_token.literal.clone()
+        Ok(identifier_token.literal.clone())
     }
 
     // Precondition: Caller must check that current_token is an LSQR
-    fn parse_array_literal(&mut self) -> Result<ast::Literal, String> {
-        // Assert that the current token is a LSQR
-        assert!(self.current_token_is(TOKENTYPE::LSQR));
-        // let open_token = self.current_token.take().unwrap();
+    fn parse_array_literal(&mut self) -> ParseResult<ast::Literal> {
+        // Expect the current token to be LSQR
+        self.expect_token(TOKENTYPE::LSQR)?;
         // Advance parser to array items
         self.next_token();
         let mut values = Vec::new();
@@ -417,26 +438,22 @@ impl<'a> Parser<'a> {
                 break
             }
         }
-        if !self.current_token_is(TOKENTYPE::RSQR) {
-            return Err("Invalid array literal: Expected array literal to end with a \"]\"".to_string());
-        }
+        self.expect_token(TOKENTYPE::RSQR)?;
         // let close_token = self.current_token.take().unwrap();
         self.next_token();
         Ok(ast::Literal::ArrayLit(values))
     }
 
     // Precondition: Caller must make sure that current_token is an left squigly
-    fn parse_object_literal(&mut self) -> Result<ast::Literal, String> {
-        assert!(self.current_token_is(TOKENTYPE::LSQUIG));
-        // let open_token = self.current_token.take().unwrap();
+    fn parse_object_literal(&mut self) -> ParseResult<ast::Literal> {
+        // Expect current token to be LSQUIG
+        self.expect_token(TOKENTYPE::LSQUIG)?;
         // Move on to fields
         self.next_token();
         let mut fields = Vec::new();
         while self.current_token_is(TOKENTYPE::IDENTIFIER) {
-            let name = self.parse_identifier();
-            if !self.current_token_is(TOKENTYPE::COLON) {
-                return Err("Invalid Object Literal: Expected a colon after field name and before value expression".to_string());
-            }
+            let name = self.parse_identifier()?;
+            self.expect_token(TOKENTYPE::COLON)?;
             // Move past colon to expression
             self.next_token();
             let value = Box::from(self.parse_expression(0)?);
@@ -448,65 +465,101 @@ impl<'a> Parser<'a> {
                 break
             }
         }
-        if !self.current_token_is(TOKENTYPE::RSQUIG) {
-            return Err("Invalid Object Literal: Expected literal to be closed with a \"}\"".to_string());
-        }
-        // let close_token = self.current_token.take().unwrap();
+        self.expect_token(TOKENTYPE::RSQUIG)?;
         self.next_token();
         Ok(ast::Literal::ObjectLit(fields))
     }
 
     // Precondition: Caller must check that current_token is a number
-    fn parse_number(&mut self) -> Result<ast::Literal, String> {
-        // Assert that the current token is a number
-        assert!(self.current_token_is(TOKENTYPE::NUMBER));
+    fn parse_number(&mut self) -> ParseResult<ast::Literal> {
+        // Expect that the current token is a number
+        self.expect_token(TOKENTYPE::NUMBER)?;
         let number_token = self.current_token.take().unwrap();
         // Advance parser to next token
         self.next_token();
         // Create and return number Expression
         let value = match number_token.literal.parse::<isize>() {
             Ok(num) => num,
-            Err(_) => {
-                return Err(String::from("Parse number encountered error parsing literal as number"));
+            Err(err) => {
+                return Err(self.error(err.into()));
             }
         };
         Ok(ast::Literal::NumberLit(value as i64))
     }
 
     // Precondition: Caller must only call this if the current token is an open parenthesis
-    fn parse_group_expression(&mut self) -> Result<ast::Expression, String> {
-        // Assert that this method was called while the current token is on open parenthesis
-        assert_eq!(self.current_token.is_some(), true);
-        let open_token = self.current_token.take().unwrap();
-        assert_eq!(open_token.token_type, TOKENTYPE::LPAREN);
+    fn parse_group_expression(&mut self) -> ParseResult<ast::Expression> {
+        // Expect that the current token is LPAREN
+        self.expect_token(TOKENTYPE::LPAREN)?;
         // Advance parser to interior expression
         self.next_token();
         let expression = self.parse_expression(0)?;
         // Check that the opened group is closed
-        if self.current_token.is_none() {
-            return Err(String::from("Group expression was not closed, did you forget a \")\""));
-        }
-        let close_token = self.current_token.take().unwrap();
-        if close_token.token_type != TOKENTYPE::RPAREN {
-            return Err(String::from("Group expression was not closed, did you forget a \")\""));
-        }
+        self.expect_token(TOKENTYPE::RPAREN)?;
         // Contruct Group expression
         let mut expression: ast::Expression = ast::Expression::Group(Box::from(expression));
-
         // Move past close expression
         self.next_token();
         if self.current_token.is_none() {
-            return Err(String::from("Group expression closing can not be last token, did you forget a \";\""));
+            return Err(self.error(ParserErrorType::UnexpectedEOF));
         }
         if self.current_token_is(TOKENTYPE::SEMICOLON) {
             self.next_token();
         }
-
         // If next token is arithmatic then pass in the group expression as the lhs
         if self.current_token.is_some() && Parser::token_type_is_arithmatic(self.current_token.as_ref().unwrap().token_type.clone()) {
             expression = self.parse_infix(expression)?;
         }
         Ok(expression)
+    }
+
+    fn error(&self, error_type: ParserErrorType) -> ParserError {
+        ParserError { 
+            error_type,
+            location: self.location.clone()
+        }
+    }
+
+    fn expect_token(&self, expected_token: TOKENTYPE) -> ParseResult<()> {
+        if let Some(current_token) = self.current_token.as_ref() {
+            if current_token.token_type == expected_token {
+                Ok(())
+            } else {
+                Err(self.error(ParserErrorType::UnexpectedToken { expected_token, recieved_token: current_token.token_type.clone() }))
+            }
+        } else {
+            Err(self.error(ParserErrorType::UnexpectedEOF))
+        }
+    }
+
+    fn expect_peek_token(&self, expected_token: TOKENTYPE) -> ParseResult<()> {
+        if let Some(peek_token) = self.peek_token.as_ref() {
+            if peek_token.token_type == expected_token {
+                Ok(())
+            } else {
+                Err(self.error(ParserErrorType::UnexpectedToken {
+                    expected_token,
+                    recieved_token: peek_token.token_type.clone()
+                }))
+            }
+        } else {
+            Err(self.error(ParserErrorType::UnexpectedEOF))
+        }
+    }
+    
+    fn expect_one_of(&self, expected_token_options: Vec<TOKENTYPE>) -> ParseResult<()> {
+        if let Some(current_token) = self.current_token.as_ref() {
+            if expected_token_options.contains(&current_token.token_type) {
+                Ok(())
+            } else {
+                Err(self.error(ParserErrorType::UnexpectedTokenOption {
+                    expected_token_options,
+                    recieved_token: current_token.token_type.clone()
+                }))
+            }
+        } else {
+            Err(self.error(ParserErrorType::UnexpectedEOF))
+        }
     }
 
     fn token_type_is_arithmatic(token: TOKENTYPE) -> bool {
@@ -536,7 +589,6 @@ impl<'a> Parser<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
     #[test]
     fn let_statement() {
         let input = String::from("let i = 12;");

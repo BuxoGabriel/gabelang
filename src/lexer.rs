@@ -1,3 +1,4 @@
+use std::fmt::Display;
 use std::iter::Peekable;
 use std::str::Chars;
 
@@ -36,10 +37,48 @@ pub enum TOKENTYPE {
     ILLEGAL
 }
 
+impl Display for TOKENTYPE {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::EQUAL => f.write_str("="),
+            Self::BANG => f.write_str("!"),
+            Self::EQ => f.write_str("=="),
+            Self::NOTEQ => f.write_str("!="),
+            Self::PLUS => f.write_str("+"),
+            Self::MINUS => f.write_str("-"),
+            Self::ASTERISK => f.write_str("*"),
+            Self::SLASH => f.write_str("/"),
+            Self::LT => f.write_str("<"),
+            Self::GT => f.write_str(">"),
+            Self::COMMA => f.write_str(","),
+            Self::COLON => f.write_str(":"),
+            Self::DOT => f.write_str("."),
+            Self::SEMICOLON => f.write_str(";"),
+            Self::LPAREN => f.write_str("("),
+            Self::RPAREN => f.write_str(")"),
+            Self::LSQUIG => f.write_str("{"),
+            Self::RSQUIG => f.write_str("}"),
+            Self::LSQR => f.write_str("["),
+            Self::RSQR => f.write_str("]"),
+            Self::LET => f.write_str("let"),
+            Self::FN => f.write_str("fn"),
+            Self::WHILE => f.write_str("while"),
+            Self::IF => f.write_str("if"),
+            Self::ELSE => f.write_str("else"),
+            Self::RETURN => f.write_str("return"),
+            Self::TRUE => f.write_str("true"),
+            Self::FALSE => f.write_str("false"),
+            Self::NUMBER => f.write_str("NUMBER"),
+            Self::IDENTIFIER => f.write_str("IDENTIFIER"),
+            Self::ILLEGAL => f.write_str("ILLEGAL TOKEN")
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Location {
-    line: usize,
-    position: usize
+    pub line: usize,
+    pub position: usize
 }
 
 impl Default for Location {
