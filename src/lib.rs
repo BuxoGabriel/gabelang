@@ -1,14 +1,15 @@
-use std::{collections::HashMap, error::Error, fs};
+use std::{collections::HashMap, fs, io};
 
-mod repl;
-mod lexer;
 mod ast;
-mod parser;
-mod evaluator;
+pub mod repl;
+pub mod lexer;
+pub mod parser;
+pub mod evaluator;
 
 use evaluator::GabrEnv;
 use parser::Parser;
 
+#[derive(Default)]
 pub struct Config {
     flags: HashMap<String, String>
 }
@@ -37,7 +38,22 @@ impl Config {
     }
 }
 
-pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
+/// Runs the gabelang interpretter by taking in a config and either running the repl or interpretting a .gabe file based on args
+/// 
+/// Config can be generated using gabelang::Config::build
+/// 
+/// # Errors
+///
+/// run can only generate errors if it is interpretting a file and either the file fails
+///
+/// # Example
+///
+/// ```
+/// use gabelang::Config;
+/// gabelang::run(Config::default()).expect("Application ran into an unexpected error");
+/// ```
+
+pub fn run(config: Config) -> io::Result<()> {
     if let Some(file_name) = config.get_flag("file") {
         let contents = fs::read_to_string(&file_name)?;
         println!("parsing {}", &file_name);
@@ -46,8 +62,10 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
             Ok(program) => {
                 println!("parsing complete! Running {}", &file_name);
                 let mut env = GabrEnv::new();
-                let res = env.eval_program(&program)?;
-                println!("{res}");
+                match env.eval_program(&program) {
+                    Ok(res) => println!("{res}"),
+                    Err(err) => println!("Execution Failed: {err}")
+                }
             },
             Err(e) => println!("{e}"),
         };
