@@ -123,7 +123,7 @@ impl<'a> Lexer<'a> {
         }
         tokens
     }
-    
+
     pub fn get_next_token(&mut self) -> Option<Token> {
         // Whitespace is not part of the language so skip it but it can delimit tokens
         self.skip_whitespace();
@@ -176,7 +176,24 @@ impl<'a> Lexer<'a> {
                 '+' => TOKENTYPE::PLUS,
                 '-' => TOKENTYPE::MINUS,
                 '*' => TOKENTYPE::ASTERISK,
-                '/' => TOKENTYPE::SLASH,
+                '/' => {
+                    if let Some(next_char) = self.peek_next_char() {
+                        if *next_char == '/' {
+                            while let Some(char) = self.get_next_char() {
+                                if char != '\n' {
+                                    self.get_next_char();
+                                } else {
+                                    break;
+                                }
+                            }
+                            return self.get_next_token()
+                        } else {
+                            TOKENTYPE::SLASH
+                        }
+                    } else {
+                        TOKENTYPE::SLASH
+                    }
+                },
                 '<' => TOKENTYPE::LT,
                 '>' => TOKENTYPE::GT,
                 ',' => TOKENTYPE::COMMA,

@@ -1,6 +1,12 @@
 [package]
 name = "gabelang"
-version = "0.1.0"
+version = "1.1.0"
 edition = "2021"
+license = "MIT"
+authors = ["Gabriel Buxo"]
+description = "A high level, interpretted and garbage collected programming language"
+readme = "README.md"
+repository = "https://github.com/buxogabriel/gabelang"
+categories = ["compiler"]
 
 [dependencies]

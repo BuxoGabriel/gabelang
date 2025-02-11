@@ -36,6 +36,19 @@ The [Writing an Interpreter in Go](interpreterbook.com) book by Thorsten Ball wa
 <number> = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 0
 ```
 
+## Commenting
+
+Comment your code using the `//comment` syntax
+Any text to the right of a double slash does not make it to the parser or interpretter and will not be evaluated as code
+
+```
+// This function doubles a number
+fn double_num(num) {
+    // Multiplies num by 2 to get the answer
+    return num * 2;
+}
+```
+
 ## Built in Functions
 
 **len(arr) -> number**
@@ -73,7 +86,6 @@ cargo test
 
 - Built in Functions
 - Add tests to ast and eval modules
-- Make repl nicer to use
 - Add fun language syntax
 
 ### Todo Reach
