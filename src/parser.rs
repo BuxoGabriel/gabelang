@@ -122,16 +122,24 @@ impl<'a> Parser<'a> {
             TOKENTYPE::LET => Ok(self.parse_let_statement()?),
             TOKENTYPE::IDENTIFIER => {
                 let assignable = self.parse_assignable()?;
-                if self.current_token_is(TOKENTYPE::EQUAL) {
-                    Ok(self.parse_assign_statement(assignable)?)
-                } else if self.current_token_is(TOKENTYPE::LPAREN) {
-                    Ok(ast::Statement::Expression(
-                        self.parse_function_call(assignable)?
-                    ))
-                }else {
-                    Ok(ast::Statement::Expression(
-                        ast::Expression::Assignable(assignable)
-                    ))
+                if let Some(token) = self.current_token.as_ref() {
+                    match token.token_type {
+                        TOKENTYPE::EQUAL => Ok(self.parse_assign_statement(assignable)?),
+                        TOKENTYPE::LPAREN => Ok(ast::Statement::Expression(self.parse_function_call(assignable)?)),
+                        TOKENTYPE::SEMICOLON => {
+                            self.next_token();
+                            Ok(ast::Statement::Expression(ast::Expression::Assignable(assignable)))
+                        }
+                        _ => {
+                            let res = Ok(ast::Statement::Expression(self.parse_infix(ast::Expression::Assignable(assignable))?));
+                            if self.current_token_is(TOKENTYPE::SEMICOLON) {
+                                self.next_token();
+                            };
+                            res
+                        }
+                    }
+                } else {
+                    Ok(ast::Statement::Expression(ast::Expression::Assignable(assignable)))
                 }
             },
             TOKENTYPE::WHILE => Ok(self.parse_while_loop()?),
