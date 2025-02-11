@@ -431,7 +431,7 @@ impl<'a> Parser<'a> {
         self.next_token();
         let mut values = Vec::new();
         while self.current_token.is_some() && !self.current_token_is(TOKENTYPE::RSQR) {
-            values.push(Box::from(self.parse_expression(0)?));
+            values.push(self.parse_expression(0)?);
             if self.current_token_is(TOKENTYPE::COMMA) {
                 self.next_token();
             } else {
@@ -456,7 +456,7 @@ impl<'a> Parser<'a> {
             self.expect_token(TOKENTYPE::COLON)?;
             // Move past colon to expression
             self.next_token();
-            let value = Box::from(self.parse_expression(0)?);
+            let value = self.parse_expression(0)?;
             fields.push((name, value));
             // Each property should be delimited by a comma
             if self.current_token_is(TOKENTYPE::COMMA) {
@@ -594,11 +594,44 @@ mod tests {
         let input = String::from("let i = 12;");
         assert_eq!(
             Parser::new(&input).parse_program(),
+            Ok(vec![ast::Statement::Let {
+                ident: "i".to_string(),
+                expression: ast::Expression::Literal(
+                    ast::Literal::NumberLit(12)
+                )
+            }])
+        );
+    }
+
+    #[test]
+    fn assign_statment() {
+        let input = String::from("i = 12;\nvar = [1, 2, 3];\nvar_two = { a: 1, b: 2 };");
+        assert_eq!(
+            Parser::new(&input).parse_program(),
             Ok(vec![
-                ast::Statement::Let {
-                    ident: "i".to_string(),
+                ast::Statement::Assign {
+                    assignable: ast::Assignable::Var(String::from("i")),
                     expression: ast::Expression::Literal(
                         ast::Literal::NumberLit(12)
+                    )
+                },
+                ast::Statement::Assign {
+                    assignable: ast::Assignable::Var(String::from("var")),
+                    expression: ast::Expression::Literal(
+                        ast::Literal::ArrayLit(vec![
+                            ast::Expression::Literal(ast::Literal::NumberLit(1)),
+                            ast::Expression::Literal(ast::Literal::NumberLit(2)),
+                            ast::Expression::Literal(ast::Literal::NumberLit(3)),
+                        ])
+                    )
+                },
+                ast::Statement::Assign {
+                    assignable: ast::Assignable::Var(String::from("var_two")),
+                    expression: ast::Expression::Literal(
+                        ast::Literal::ObjectLit(vec![
+                            (String::from("a"), ast::Expression::Literal(ast::Literal::NumberLit(1))),
+                            (String::from("b"), ast::Expression::Literal(ast::Literal::NumberLit(2)))
+                        ])
                     )
                 }
             ])
@@ -610,13 +643,11 @@ mod tests {
         let input = String::from("return i + 1;");
         assert_eq!(
             Parser::new(&input).parse_program(),
-            Ok(vec![
-                ast::Statement::Return(Some(ast::Expression::Infix {
-                    op: ast::InfixOp::Add,
-                    left: Box::from(ast::Expression::Assignable(ast::Assignable::Var("i".to_string()))),
-                    right: Box::from(ast::Expression::Literal(ast::Literal::NumberLit(1)))
-                }))
-            ])
+            Ok(vec![ast::Statement::Return(Some(ast::Expression::Infix {
+                op: ast::InfixOp::Add,
+                left: Box::from(ast::Expression::Assignable(ast::Assignable::Var("i".to_string()))),
+                right: Box::from(ast::Expression::Literal(ast::Literal::NumberLit(1)))
+            }))])
         );
     }
 
@@ -625,23 +656,88 @@ mod tests {
         let input = "while i {i = i - 1;}".to_string();
         assert_eq!(
             Parser::new(&input).parse_program(),
-            Ok(vec![
-                ast::Statement::While { 
-                    cond: ast::Expression::Assignable(
-                        ast::Assignable::Var("i".to_string())
-                    ),
-                    body: vec![
-                        ast::Statement::Assign { 
-                            assignable: ast::Assignable::Var("i".to_string()),
-                            expression: ast::Expression::Infix { 
-                                op: ast::InfixOp::Sub,
-                                left: Box::from(ast::Expression::Assignable(ast::Assignable::Var("i".to_string()))),
-                                right: Box::from(ast::Expression::Literal(ast::Literal::NumberLit(1)))
-                            }
+            Ok(vec![ast::Statement::While { 
+                cond: ast::Expression::Assignable(
+                    ast::Assignable::Var("i".to_string())
+                ),
+                body: vec![
+                    ast::Statement::Assign { 
+                        assignable: ast::Assignable::Var("i".to_string()),
+                        expression: ast::Expression::Infix { 
+                            op: ast::InfixOp::Sub,
+                            left: Box::from(ast::Expression::Assignable(ast::Assignable::Var("i".to_string()))),
+                            right: Box::from(ast::Expression::Literal(ast::Literal::NumberLit(1)))
                         }
-                    ]
-                }
+                    }
+                ]
+            }])
+        )
+    }
+
+    #[test]
+    fn if_statement() {
+        let input = "if i > 2 * 2 {\n return i + 2;\n} else { return i; }".to_string();
+        assert_eq!(
+            Parser::new(&input).parse_program(),
+            Ok(vec![ast::Statement::If {
+                cond: ast::Expression::Infix {
+                    left: Box::from(ast::Expression::Assignable(ast::Assignable::Var(String::from("i")))),
+                    right: Box::from(ast::Expression::Infix {
+                        left: Box::from(ast::Expression::Literal(ast::Literal::NumberLit(2))),
+                        right: Box::from(ast::Expression::Literal(ast::Literal::NumberLit(2))),
+                        op: ast::InfixOp::Mult
+                    }),
+                    op: ast::InfixOp::Gt
+                },
+                body: vec![ast::Statement::Return(Some(ast::Expression::Infix {
+                    left: Box::from(ast::Expression::Assignable(ast::Assignable::Var(String::from("i")))),
+                    right: Box::from(ast::Expression::Literal(ast::Literal::NumberLit(2))),
+                    op: ast::InfixOp::Add
+                }))],
+                r#else: Some(vec![ast::Statement::Return(Some(ast::Expression::Assignable(
+                    ast::Assignable::Var(String::from("i"))
+                )))])
+            }])
+        )
+    }
+
+    #[test]
+    fn func_decl() {
+        let input = "fn times_two(num) {\n\treturn num * 2;\n}".to_string();
+        assert_eq!(
+            Parser::new(&input).parse_program(),
+            Ok(vec![
+                ast::Statement::FuncDecl(ast::Function {
+                    ident: String::from("times_two"),
+                    params: vec![String::from("num")],
+                    body: vec![ast::Statement::Return(Some(
+                        ast::Expression::Infix {
+                            left: Box::from(ast::Expression::Assignable(ast::Assignable::Var(String::from("num")))),
+                            right: Box::from(ast::Expression::Literal(ast::Literal::NumberLit(2))),
+                            op: ast::InfixOp::Mult
+                        }
+                    ))]
+                })
             ])
+        )
+    }
+
+    #[test]
+    fn expression_statement() {
+        let input = "2 * times_two(num[2])".to_string();
+        assert_eq!(
+            Parser::new(&input).parse_program(),
+            Ok(vec![ast::Statement::Expression(ast::Expression::Infix {
+                left: Box::from(ast::Expression::Literal(ast::Literal::NumberLit(2))),
+                right:Box::from(ast::Expression::FuncCall {
+                    func: ast::Assignable::Var(String::from("times_two")),
+                    params: vec![ast::Expression::Assignable(ast::Assignable::ArrayIndex{
+                        array: Box::from(ast::Assignable::Var(String::from("num"))),
+                        index: Box::from(ast::Expression::Literal(ast::Literal::NumberLit(2)))
+                    })]
+                }),
+                op: ast::InfixOp::Mult
+            })])
         )
     }
 }

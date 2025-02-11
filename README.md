@@ -3,7 +3,7 @@
 ## Overview
 
 This is a language I am writing in rust for fun and to learn more about lexers, parsers, interpreters, and to dymistify programming languages in general.
-The *Writing an Interpreter in Go* book by Thorsten Ball was used as a reference for this project.
+The [Writing an Interpreter in Go](interpreterbook.com) book by Thorsten Ball was used as a reference and insperation for this project as well as [mkdb](github.com/antoniosarosi/mkdb) by Antonio Sarosi.
 
 ## BNF / Language Grammer
 
@@ -74,7 +74,6 @@ cargo test
 - Built in Functions
 - Add tests to ast and eval modules
 - Make repl nicer to use
-- Improve error messages
 - Add fun language syntax
 
 ### Todo Reach

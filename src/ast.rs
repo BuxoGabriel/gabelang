@@ -75,8 +75,8 @@ pub enum Assignable {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Literal {
-    ArrayLit(Vec<Box<Expression>>),
-    ObjectLit(Vec<(String, Box<Expression>)>),
+    ArrayLit(Vec<Expression>),
+    ObjectLit(Vec<(String, Expression)>),
     NumberLit(i64),
 }
 
