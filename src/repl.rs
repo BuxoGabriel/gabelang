@@ -3,7 +3,29 @@ use crate::evaluator::GabrEnv;
 use crate::parser::Parser;
 
 pub fn start() {
-    print!(">>");
+    println!(r"WELCOME TO
+   _____       _          _                   
+  / ____|     | |        | |                  
+ | |  __  __ _| |__   ___| | __ _ _ __   __ _ 
+ | | |_ |/ _` | '_ \ / _ \ |/ _` | '_ \ / _` |
+ | |__| | (_| | |_) |  __/ | (_| | | | | (_| |
+  \_____|\__,_|_.__/ \___|_|\__,_|_| |_|\__, |
+                                         __/ |
+                                        |___/ 
+GABELANG IS A HIGH LEVEL, INTERPRETTED, GARBAGE COLLECTED, PROGRAMMING LANGUAGE THAT SUPPORTS
+ARRAYS,OBJECTS, AND FIRST CLASS AND HIGHER ORDER FUNCTIONS
+
+TRY DECLARING VARIABLES LIKE THIS
+>> let i = {{ a: [5], b: 3 * 3 }};
+
+TRY DECLARING FUNCTIONS LIKE THIS
+>> fn double_and_abs(num) {{if num > 0 {{return num * 2;}} else {{return num * -2;}}}}
+
+TYPING AN EXPRESSION INSTEAD OF A STATEMENT WILL PRINT THE EVALUATION OF THE STATEMENT
+>> double_and_abs(i.b)
+18");
+
+    print!(">> ");
     io::stdout().flush().unwrap();
     let stdin = io::stdin();
     let mut env = GabrEnv::new();
@@ -26,7 +48,7 @@ pub fn start() {
                 Err(err) => println!("{err}")
             };
         }
-        print!(">>");
+        print!(">> ");
         io::stdout().flush().unwrap();
     }
 }

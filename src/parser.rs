@@ -314,7 +314,6 @@ impl<'a> Parser<'a> {
         if self.current_token_is(TOKENTYPE::LSQUIG) {
             return Ok(ast::Expression::Literal(self.parse_object_literal()?))
         }
-        self.expect_one_of(vec![TOKENTYPE::NUMBER, TOKENTYPE::IDENTIFIER])?;
         // Get "left side" of the expression
         let mut left_side: ast::Expression = self.parse_prefix()?;
         while self.current_token.is_some() {
