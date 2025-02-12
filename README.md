@@ -84,12 +84,17 @@ cargo test
 
 ## Todo
 
+- String Type
+- For Loops
+- Do While Loops
+- Better Documentation
 - Built in Functions
 - Add tests to ast and eval modules
 - Add fun language syntax
 
 ### Todo Reach
 
+- Add tooling/language server
 - Add bytecode compiler
 - Create VM that can run bytecode
 - Compile to/through C, NASM, or MIPS

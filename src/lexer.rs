@@ -2,38 +2,82 @@ use std::fmt::Display;
 use std::iter::Peekable;
 use std::str::Chars;
 
+/// An enum over all valid token types in the language
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum TOKENTYPE {
+    /// Maps to =
     EQUAL,
+    /// Maps to !
     BANG,
+    /// Maps to ==
     EQ,
+    /// Maps to !=
     NOTEQ,
+    /// Maps to +
     PLUS,
+    /// Maps to -
     MINUS,
+    /// Maps to *
     ASTERISK,
+    /// Maps to /
     SLASH,
+    /// Maps to <
     LT,
+    /// Maps to >
     GT,
+    /// Maps to ,
     COMMA,
+    /// Maps to :
     COLON,
+    /// Maps to .
     DOT,
+    /// Maps to ;
     SEMICOLON,
+    /// Maps to (
     LPAREN,
+    /// Maps to )
     RPAREN,
+    /// Maps to {
     LSQUIG,
+    /// Maps to }
     RSQUIG,
+    /// Maps to [
     LSQR,
+    /// Maps to ]
     RSQR,
+    /// Maps to let
     LET,
+    /// Maps to fn
     FN,
+    /// Maps to while
     WHILE,
+    /// Maps to if
     IF,
+    /// Maps to else
     ELSE,
+    /// Maps to return
     RETURN,
+    /// Maps to true
     TRUE,
+    /// Maps to false
     FALSE,
+    /// Maps to any positive integer
     NUMBER,
+    /// Maps to any label that starts with an alphabetical character and only contains alphabetical
+    /// characters and underscores
+    ///
+    /// # Examples
+    ///
+    /// - ident
+    /// - array_list
+    /// - my_obj
+    ///
+    /// # Invalid examples
+    ///
+    /// - _my_var
+    /// - var1
     IDENTIFIER,
+    /// Any other character that is not used by the gabelang language
     ILLEGAL
 }
 
@@ -75,9 +119,13 @@ impl Display for TOKENTYPE {
     }
 }
 
+/// A location in a file or string input 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Location {
+    /// The line of the string as delimited by newline characters
     pub line: usize,
+    /// The position in the string, starting at one on the first character of a line and incremented by 1 for every
+    /// character, including whitespace
     pub position: usize
 }
 
@@ -90,25 +138,33 @@ impl Default for Location {
     }
 }
 
+/// A token is a combination of the literal that was used to make it, its TOKENTYPE, and its
+/// location in the input string
 #[derive(Debug, Clone, PartialEq)]
 pub struct Token {
+    /// The type of the token
     pub token_type: TOKENTYPE,
+    /// The literal text that translated into the token
     pub literal: String,
+    /// The location in the string where the first character of the token literal was found.
     pub location: Location
 }
 
 impl Token {
+    /// Creates a new token from a [TOKENTYPE], literal string, and [Location]
     pub fn new(token_type: TOKENTYPE, literal: String, location: Location) -> Self {
         Self { token_type, literal, location}
     }
 }
 
+/// The lexer creates a token iterator from a string that it is processing
 pub struct Lexer<'a> {
     peekable_iter: Peekable<Chars<'a>>,
     location: Location
 }
 
 impl<'a> Lexer<'a> {
+    /// Creates a new Lexer from a string input
     pub fn new(contents: &'a str) -> Lexer<'a> {
         Self {
             peekable_iter: contents.chars().peekable(),
@@ -116,6 +172,7 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    /// Generates a vec of all tokens parsed from the lexer's string
     pub fn parse(&mut self) -> Vec<Token> {
         let mut tokens = Vec::new();
         while let Some(token) = self.get_next_token() {
@@ -124,6 +181,7 @@ impl<'a> Lexer<'a> {
         tokens
     }
 
+    /// Gets the next token from the input string in a similar way to an iterator
     pub fn get_next_token(&mut self) -> Option<Token> {
         // Whitespace is not part of the language so skip it but it can delimit tokens
         self.skip_whitespace();

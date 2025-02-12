@@ -2,6 +2,9 @@ use std::io::{self, BufRead, Write};
 use crate::evaluator::GabrEnv;
 use crate::parser::Parser;
 
+/// Starts the gabelang repl in an isolated environment
+///
+/// The repl runs until forcefully terminated and prints to stdout and takes input from stdin.
 pub fn start() {
     println!(r"WELCOME TO
    _____       _          _                   

@@ -41,6 +41,7 @@ impl Display for ParserErrorType {
     }
 }
 
+/// Error type generated when parsing fails
 #[derive(PartialEq, Debug)]
 pub struct ParserError {
     error_type: ParserErrorType,
@@ -55,6 +56,7 @@ impl Display for ParserError {
 
 type ParseResult<T> = Result<T, ParserError>;
 
+/// Struct that turns a string into an AST(Abstract Syntax Tree)
 pub struct Parser<'a> {
     lexer: Lexer<'a>,
     current_token: Option<Token>,
@@ -63,6 +65,7 @@ pub struct Parser<'a> {
 }
 
 impl<'a> Parser<'a> {
+    /// Creates a new parser from an input string
     pub fn new(contents: &'a str) -> Parser<'a> {
         let lexer = Lexer::new(contents);
         Self {
@@ -85,6 +88,9 @@ impl<'a> Parser<'a> {
         self.current_token.is_some() && self.current_token.as_ref().unwrap().token_type == token_type
     }
 
+    /// Turns the input string into a vec of statements
+    ///
+    /// If parsing fails it returns a [ParserError]
     pub fn parse_program(&mut self) -> ParseResult<Vec<ast::Statement>> {
         self.next_token();
         self.next_token();
@@ -514,7 +520,7 @@ impl<'a> Parser<'a> {
             self.next_token();
         }
         // If next token is arithmatic then pass in the group expression as the lhs
-        if self.current_token.is_some() && Parser::token_type_is_arithmatic(self.current_token.as_ref().unwrap().token_type.clone()) {
+        if self.current_token.is_some() && Self::token_type_is_arithmatic(self.current_token.as_ref().unwrap().token_type.clone()) {
             expression = self.parse_infix(expression)?;
         }
         Ok(expression)
