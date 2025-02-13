@@ -85,10 +85,11 @@ cargo test
 ## Todo
 
 - String Type
+- Object get and set/string indexing
 - For Loops
 - Do While Loops
 - Better Documentation
-- Built in Functions
+- Built in Functions(print, file, fetch)
 - Add tests to ast and eval modules
 - Add fun language syntax
 

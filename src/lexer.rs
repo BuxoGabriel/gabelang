@@ -1,10 +1,11 @@
 use std::fmt::Display;
 use std::iter::Peekable;
+use std::num::ParseIntError;
 use std::str::Chars;
 
 /// An enum over all valid token types in the language
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub enum TOKENTYPE {
+pub enum Token {
     /// Maps to =
     EQUAL,
     /// Maps to !
@@ -33,6 +34,8 @@ pub enum TOKENTYPE {
     DOT,
     /// Maps to ;
     SEMICOLON,
+    /// Maps to all characters inside of two double quotes
+    STRING(String),
     /// Maps to (
     LPAREN,
     /// Maps to )
@@ -62,7 +65,7 @@ pub enum TOKENTYPE {
     /// Maps to false
     FALSE,
     /// Maps to any positive integer
-    NUMBER,
+    INT(isize),
     /// Maps to any label that starts with an alphabetical character and only contains alphabetical
     /// characters and underscores
     ///
@@ -76,12 +79,10 @@ pub enum TOKENTYPE {
     ///
     /// - _my_var
     /// - var1
-    IDENTIFIER,
-    /// Any other character that is not used by the gabelang language
-    ILLEGAL
+    IDENTIFIER(String),
 }
 
-impl Display for TOKENTYPE {
+impl Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::EQUAL => f.write_str("="),
@@ -98,6 +99,7 @@ impl Display for TOKENTYPE {
             Self::COLON => f.write_str(":"),
             Self::DOT => f.write_str("."),
             Self::SEMICOLON => f.write_str(";"),
+            Self::STRING(string) => write!(f, "\"{}\"", string),
             Self::LPAREN => f.write_str("("),
             Self::RPAREN => f.write_str(")"),
             Self::LSQUIG => f.write_str("{"),
@@ -112,9 +114,8 @@ impl Display for TOKENTYPE {
             Self::RETURN => f.write_str("return"),
             Self::TRUE => f.write_str("true"),
             Self::FALSE => f.write_str("false"),
-            Self::NUMBER => f.write_str("NUMBER"),
-            Self::IDENTIFIER => f.write_str("IDENTIFIER"),
-            Self::ILLEGAL => f.write_str("ILLEGAL TOKEN")
+            Self::INT(val) => write!(f, "Int({})", val),
+            Self::IDENTIFIER(string) => write!(f, "IDENTIFIER({})", string),
         }
     }
 }
@@ -138,24 +139,48 @@ impl Default for Location {
     }
 }
 
-/// A token is a combination of the literal that was used to make it, its TOKENTYPE, and its
-/// location in the input string
+/// A combination of a Token and its location in the input string
 #[derive(Debug, Clone, PartialEq)]
-pub struct Token {
-    /// The type of the token
-    pub token_type: TOKENTYPE,
-    /// The literal text that translated into the token
-    pub literal: String,
-    /// The location in the string where the first character of the token literal was found.
-    pub location: Location
-}
+pub struct TokenWithLocation(Token, Location);
 
-impl Token {
-    /// Creates a new token from a [TOKENTYPE], literal string, and [Location]
-    pub fn new(token_type: TOKENTYPE, literal: String, location: Location) -> Self {
-        Self { token_type, literal, location}
+impl TokenWithLocation {
+    /// Creates a new TokenWithLocation from its token, and location
+    pub fn new(token: Token, location: Location) -> Self {
+        Self(token, location)
+    }
+
+    /// Converts a TokenWithLocation into a Token for ease of use
+    pub fn to_token(self) -> Token {
+        self.0
+    }
+    pub fn clone_location(self) -> Location {
+        self.1.clone()
     }
 }
+
+#[derive(Debug, PartialEq)]
+pub enum LexerError {
+    ParseIntErr(ParseIntError),
+    IllegalToken
+}
+
+impl From<ParseIntError> for LexerError {
+    fn from(value: ParseIntError) -> Self {
+        Self::ParseIntErr(value)
+    }
+}
+
+impl Display for LexerError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Lexer Error: ");
+        match self {
+            Self::ParseIntErr(err) => write!(f, "Error parsing number: {err}"),
+            Self::IllegalToken => write!(f, "Illegal character could not make valid token")
+        }
+    }
+}
+
+type LexerResult<T> = Result<T, LexerError>;
 
 /// The lexer creates a token iterator from a string that it is processing
 pub struct Lexer<'a> {
@@ -173,67 +198,63 @@ impl<'a> Lexer<'a> {
     }
 
     /// Generates a vec of all tokens parsed from the lexer's string
-    pub fn parse(&mut self) -> Vec<Token> {
+    pub fn parse(&mut self) -> LexerResult<Vec<TokenWithLocation>> {
         let mut tokens = Vec::new();
-        while let Some(token) = self.get_next_token() {
+        while let Some(token) = self.get_next_token()? {
             tokens.push(token);
         }
-        tokens
+        Ok(tokens)
     }
 
     /// Gets the next token from the input string in a similar way to an iterator
-    pub fn get_next_token(&mut self) -> Option<Token> {
+    pub fn get_next_token(&mut self) -> LexerResult<Option<TokenWithLocation>> {
         // Whitespace is not part of the language so skip it but it can delimit tokens
         self.skip_whitespace();
-        let token_type: TOKENTYPE;
-        let mut literal: String;
+        let token: Token;
         let location = self.location.clone();
         let current_char = self.get_next_char();
         // If no chars are left return None for EOF
         if current_char.is_none() {
-            return None
+            return Ok(None)
         }
         let current_char = current_char.unwrap();
         // There is a next char
         if Lexer::is_alpha(current_char) {
-            literal = self.read_identifier(current_char);
-            token_type = Lexer::literal_keyword(&literal);
+            let literal = self.read_identifier(current_char);
+            token = Lexer::literal_keyword(&literal);
         }
         else if current_char.is_numeric() {
-            literal = self.read_number(current_char);
-            token_type = TOKENTYPE::NUMBER;
+            let value = self.read_number(current_char).parse::<isize>()?;
+            token = Token::INT(value);
         } else {
-            literal = String::from(current_char);
-            token_type = match current_char {
+            token = match current_char {
                 '=' => {
                     if let Some(next_char) = self.peek_next_char() {
                         if *next_char == '=' {
-                            literal = String::from("==");
                             self.get_next_char();
-                            TOKENTYPE::EQ
+                            Token::EQ
                         } else {
-                            TOKENTYPE::EQUAL
+                            Token::EQUAL
                         }
                     } else {
-                        TOKENTYPE::EQUAL
+                        Token::EQUAL
                     }
                 }
                 '!' => {
                     if let Some(next_char) = self.peek_next_char() {
                         if *next_char == '=' {
-                            literal = String::from("!=");
                             self.get_next_char();
-                            TOKENTYPE::NOTEQ
+                            Token::NOTEQ
                         } else {
-                            TOKENTYPE::BANG
+                            Token::BANG
                         }
                     } else {
-                        TOKENTYPE::BANG
+                        Token::BANG
                     }
                 }
-                '+' => TOKENTYPE::PLUS,
-                '-' => TOKENTYPE::MINUS,
-                '*' => TOKENTYPE::ASTERISK,
+                '+' => Token::PLUS,
+                '-' => Token::MINUS,
+                '*' => Token::ASTERISK,
                 '/' => {
                     if let Some(next_char) = self.peek_next_char() {
                         if *next_char == '/' {
@@ -246,28 +267,28 @@ impl<'a> Lexer<'a> {
                             }
                             return self.get_next_token()
                         } else {
-                            TOKENTYPE::SLASH
+                            Token::SLASH
                         }
                     } else {
-                        TOKENTYPE::SLASH
+                        Token::SLASH
                     }
                 },
-                '<' => TOKENTYPE::LT,
-                '>' => TOKENTYPE::GT,
-                ',' => TOKENTYPE::COMMA,
-                '.' => TOKENTYPE::DOT,
-                ':' => TOKENTYPE::COLON,
-                ';' => TOKENTYPE::SEMICOLON,
-                '(' => TOKENTYPE::LPAREN,
-                ')' => TOKENTYPE::RPAREN,
-                '{' => TOKENTYPE::LSQUIG,
-                '}' => TOKENTYPE::RSQUIG,
-                '[' => TOKENTYPE::LSQR,
-                ']' => TOKENTYPE::RSQR,
-                _ => TOKENTYPE::ILLEGAL
+                '<' => Token::LT,
+                '>' => Token::GT,
+                ',' => Token::COMMA,
+                '.' => Token::DOT,
+                ':' => Token::COLON,
+                ';' => Token::SEMICOLON,
+                '(' => Token::LPAREN,
+                ')' => Token::RPAREN,
+                '{' => Token::LSQUIG,
+                '}' => Token::RSQUIG,
+                '[' => Token::LSQR,
+                ']' => Token::RSQR,
+                _ => return Err(LexerError::IllegalToken)
             };
         }
-        Some(Token::new(token_type, literal, location))
+        Ok(Some(TokenWithLocation::new(token, location)))
     }
 
     fn get_next_char(&mut self) -> Option<char> {
@@ -324,21 +345,33 @@ impl<'a> Lexer<'a> {
         c.is_alphabetic() || c == '_'
     }
 
-    fn literal_keyword(literal: &String) -> TOKENTYPE {
-        match literal.as_str() {
-            "let" => TOKENTYPE::LET,
-            "return" =>TOKENTYPE::RETURN,
-            "fn" => TOKENTYPE::FN,
-            "while" => TOKENTYPE::WHILE,
-            "if" => TOKENTYPE::IF,
-            "else" => TOKENTYPE::ELSE,
-            "True" => TOKENTYPE::TRUE,
-            "False" => TOKENTYPE::FALSE,
-        _ => TOKENTYPE::IDENTIFIER
+    fn literal_keyword(literal: &str) -> Token {
+        match literal {
+            "let" => Token::LET,
+            "return" =>Token::RETURN,
+            "fn" => Token::FN,
+            "while" => Token::WHILE,
+            "if" => Token::IF,
+            "else" => Token::ELSE,
+            "True" => Token::TRUE,
+            "False" => Token::FALSE,
+        _ => Token::IDENTIFIER(String::from(literal))
         }
     }
 }
 
+impl Iterator for Lexer<'_> {
+    type Item = LexerResult<TokenWithLocation>;
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.get_next_token() {
+            Ok(val) => match val {
+                Some(val) => Some(Ok(val)),
+                None => None
+            },
+            Err(err) => Some(Err(err))
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -347,11 +380,11 @@ mod tests {
     #[test]
     fn parse_numbers() {
         let input = String::from("123 323 111");
-        let expected_tokens = vec![
-            Token::new(TOKENTYPE::NUMBER, String::from("123"), Location::default()),
-            Token::new(TOKENTYPE::NUMBER, String::from("323"), Location { line: 1, position: 5 }),
-            Token::new(TOKENTYPE::NUMBER, String::from("111"), Location { line: 1, position: 9 }),
-        ];
+        let expected_tokens = Ok(vec![
+            TokenWithLocation::new(Token::INT(123), Location::default()),
+            TokenWithLocation(Token::INT(323), Location { line: 1, position: 5 }),
+            TokenWithLocation::new(Token::INT(111), Location { line: 1, position: 9 }),
+        ]);
         let mut lexer = Lexer::new(&input);
         let tokens = lexer.parse();
         assert_eq!(expected_tokens, tokens);
@@ -360,10 +393,10 @@ mod tests {
     #[test]
     fn parse_identifiers() {
         let input = String::from("Hello wo_rld");
-        let expected_tokens = vec![
-            Token::new(TOKENTYPE::IDENTIFIER, String::from("Hello"), Location::default()),
-            Token::new(TOKENTYPE::IDENTIFIER, String::from("wo_rld"), Location { line: 1, position: 7 }),
-        ];
+        let expected_tokens = Ok(vec![
+            TokenWithLocation::new(Token::IDENTIFIER(String::from("Hello")), Location::default()),
+            TokenWithLocation::new(Token::IDENTIFIER(String::from("wo_rld")), Location { line: 1, position: 7 }),
+        ]);
         let mut lexer = Lexer::new(&input);
         let tokens = lexer.parse();
         assert_eq!(expected_tokens, tokens);
@@ -372,25 +405,25 @@ mod tests {
     #[test]
     fn parse_symbols() {
         let input = String::from("=+-*/,:;()[]{}<>!");
-        let expected_tokens = vec![
-            Token::new(TOKENTYPE::EQUAL, String::from('='), Location::default()),
-            Token::new(TOKENTYPE::PLUS, String::from('+'), Location { line: 1, position: 2 }),
-            Token::new(TOKENTYPE::MINUS, String::from('-'), Location { line: 1, position: 3 }),
-            Token::new(TOKENTYPE::ASTERISK, String::from('*'), Location { line: 1, position: 4 }),
-            Token::new(TOKENTYPE::SLASH, String::from('/'), Location { line: 1, position: 5 }),
-            Token::new(TOKENTYPE::COMMA, String::from(','), Location { line: 1, position: 6 }),
-            Token::new(TOKENTYPE::COLON, String::from(':'), Location { line: 1, position: 7 }),
-            Token::new(TOKENTYPE::SEMICOLON, String::from(';'), Location { line: 1, position: 8 }),
-            Token::new(TOKENTYPE::LPAREN, String::from('('), Location { line: 1, position: 9 }),
-            Token::new(TOKENTYPE::RPAREN, String::from(')'), Location { line: 1, position: 10 }),
-            Token::new(TOKENTYPE::LSQR, String::from('['), Location { line: 1, position: 11 }),
-            Token::new(TOKENTYPE::RSQR, String::from(']'), Location { line: 1, position: 12 }),
-            Token::new(TOKENTYPE::LSQUIG, String::from('{'), Location { line: 1, position: 13 }),
-            Token::new(TOKENTYPE::RSQUIG, String::from('}'), Location { line: 1, position: 14 }),
-            Token::new(TOKENTYPE::LT, String::from('<'), Location { line: 1, position: 15 }),
-            Token::new(TOKENTYPE::GT, String::from('>'), Location { line: 1, position: 16 }),
-            Token::new(TOKENTYPE::BANG, String::from('!'), Location { line: 1, position: 17 }),
-        ];
+        let expected_tokens = Ok(vec![
+            TokenWithLocation::new(Token::EQUAL, Location::default()),
+            TokenWithLocation::new(Token::PLUS, Location { line: 1, position: 2 }),
+            TokenWithLocation::new(Token::MINUS, Location { line: 1, position: 3 }),
+            TokenWithLocation::new(Token::ASTERISK, Location { line: 1, position: 4 }),
+            TokenWithLocation::new(Token::SLASH, Location { line: 1, position: 5 }),
+            TokenWithLocation::new(Token::COMMA, Location { line: 1, position: 6 }),
+            TokenWithLocation::new(Token::COLON, Location { line: 1, position: 7 }),
+            TokenWithLocation::new(Token::SEMICOLON, Location { line: 1, position: 8 }),
+            TokenWithLocation::new(Token::LPAREN, Location { line: 1, position: 9 }),
+            TokenWithLocation::new(Token::RPAREN, Location { line: 1, position: 10 }),
+            TokenWithLocation::new(Token::LSQR, Location { line: 1, position: 11 }),
+            TokenWithLocation::new(Token::RSQR, Location { line: 1, position: 12 }),
+            TokenWithLocation::new(Token::LSQUIG, Location { line: 1, position: 13 }),
+            TokenWithLocation::new(Token::RSQUIG, Location { line: 1, position: 14 }),
+            TokenWithLocation::new(Token::LT, Location { line: 1, position: 15 }),
+            TokenWithLocation::new(Token::GT, Location { line: 1, position: 16 }),
+            TokenWithLocation::new(Token::BANG, Location { line: 1, position: 17 }),
+        ]);
         let mut lexer = Lexer::new(&input);
         let tokens = lexer.parse();
         assert_eq!(expected_tokens, tokens);
@@ -399,25 +432,24 @@ mod tests {
     #[test]
     fn parse_illegal() {
         let input = String::from('~');
-        let expected_tokens = vec![Token::new(TOKENTYPE::ILLEGAL, String::from('~'), Location::default())];
+        let expected_result = Err(LexerError::IllegalToken);
         let mut lexer = Lexer::new(&input);
-        let tokens = lexer.parse();
-        assert_eq!(expected_tokens, tokens);
+        assert_eq!(expected_result, lexer.parse());
     }
 
     #[test]
     fn parse_keywords() {
         let input = String::from("let fn while if else return True False");
-        let expected_tokens = vec![
-            Token::new(TOKENTYPE::LET, String::from("let"), Location::default()),
-            Token::new(TOKENTYPE::FN, String::from("fn"), Location { line: 1, position: 5 }),
-            Token::new(TOKENTYPE::WHILE, String::from("while"), Location{ line: 1, position: 8 }),
-            Token::new(TOKENTYPE::IF, String::from("if"), Location { line: 1, position: 14 }),
-            Token::new(TOKENTYPE::ELSE, String::from("else"), Location{ line: 1, position: 17 }),
-            Token::new(TOKENTYPE::RETURN, String::from("return"), Location{ line: 1, position: 22 }),
-            Token::new(TOKENTYPE::TRUE, String::from("True"), Location{ line: 1, position: 29 }),
-            Token::new(TOKENTYPE::FALSE, String::from("False"), Location{ line: 1, position: 34 }),
-        ];
+        let expected_tokens = Ok(vec![
+            TokenWithLocation::new(Token::LET, Location::default()),
+            TokenWithLocation::new(Token::FN, Location { line: 1, position: 5 }),
+            TokenWithLocation::new(Token::WHILE, Location{ line: 1, position: 8 }),
+            TokenWithLocation::new(Token::IF, Location { line: 1, position: 14 }),
+            TokenWithLocation::new(Token::ELSE, Location{ line: 1, position: 17 }),
+            TokenWithLocation::new(Token::RETURN, Location{ line: 1, position: 22 }),
+            TokenWithLocation::new(Token::TRUE, Location{ line: 1, position: 29 }),
+            TokenWithLocation::new(Token::FALSE, Location{ line: 1, position: 34 }),
+        ]);
         let mut lexer = Lexer::new(&input);
         let tokens = lexer.parse();
         assert_eq!(tokens, expected_tokens)
@@ -426,23 +458,23 @@ mod tests {
     #[test]
     fn parse_everything() {
         let input = String::from("fn plus_one(foo) {\n\tlet number = foo + 1; number\n}");
-        let expected_tokens = vec![
-            Token::new(TOKENTYPE::FN, String::from("fn"), Location::default()),
-            Token::new(TOKENTYPE::IDENTIFIER, String::from("plus_one"), Location { line: 1, position: 4 }),
-            Token::new(TOKENTYPE::LPAREN, String::from('('), Location { line: 1, position: 12 }),
-            Token::new(TOKENTYPE::IDENTIFIER, String::from("foo"), Location { line: 1, position: 13 }),
-            Token::new(TOKENTYPE::RPAREN, String::from(')'), Location { line: 1, position: 16 }),
-            Token::new(TOKENTYPE::LSQUIG, String::from('{'), Location { line: 1, position: 18 }),
-            Token::new(TOKENTYPE::LET, String::from("let"), Location { line: 2, position: 2 }),
-            Token::new(TOKENTYPE::IDENTIFIER, String::from("number"), Location { line: 2, position: 6 }),
-            Token::new(TOKENTYPE::EQUAL, String::from('='), Location { line: 2, position: 13 }),
-            Token::new(TOKENTYPE::IDENTIFIER, String::from("foo"), Location { line: 2, position: 15 }),
-            Token::new(TOKENTYPE::PLUS, String::from('+'), Location { line: 2, position: 19 }),
-            Token::new(TOKENTYPE::NUMBER, String::from("1"), Location { line: 2, position: 21 }),
-            Token::new(TOKENTYPE::SEMICOLON, String::from(';'), Location { line: 2, position: 22 }),
-            Token::new(TOKENTYPE::IDENTIFIER, String::from("number"), Location { line: 2, position: 24 }),
-            Token::new(TOKENTYPE::RSQUIG, String::from('}'), Location { line: 3, position: 1 }),
-        ];
+        let expected_tokens = Ok(vec![
+            TokenWithLocation::new(Token::FN, Location::default()),
+            TokenWithLocation::new(Token::IDENTIFIER(String::from("plus_one")), Location { line: 1, position: 4 }),
+            TokenWithLocation::new(Token::LPAREN, Location { line: 1, position: 12 }),
+            TokenWithLocation::new(Token::IDENTIFIER(String::from("foo")), Location { line: 1, position: 13 }),
+            TokenWithLocation::new(Token::RPAREN, Location { line: 1, position: 16 }),
+            TokenWithLocation::new(Token::LSQUIG, Location { line: 1, position: 18 }),
+            TokenWithLocation::new(Token::LET, Location { line: 2, position: 2 }),
+            TokenWithLocation::new(Token::IDENTIFIER(String::from("number")), Location { line: 2, position: 6 }),
+            TokenWithLocation::new(Token::EQUAL, Location { line: 2, position: 13 }),
+            TokenWithLocation::new(Token::IDENTIFIER(String::from("foo")), Location { line: 2, position: 15 }),
+            TokenWithLocation::new(Token::PLUS, Location { line: 2, position: 19 }),
+            TokenWithLocation::new(Token::INT(1), Location { line: 2, position: 21 }),
+            TokenWithLocation::new(Token::SEMICOLON, Location { line: 2, position: 22 }),
+            TokenWithLocation::new(Token::IDENTIFIER(String::from("number")), Location { line: 2, position: 24 }),
+            TokenWithLocation::new(Token::RSQUIG, Location { line: 3, position: 1 }),
+        ]);
         let mut lexer = Lexer::new(&input);
         let tokens = lexer.parse();
         assert_eq!(expected_tokens, tokens);

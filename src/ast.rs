@@ -1,6 +1,6 @@
 use std::fmt::{Write, Debug, Display};
 
-use crate::lexer::{Token, TOKENTYPE};
+use crate::lexer::{ TokenWithLocation, Token };
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Statement {
@@ -98,23 +98,30 @@ pub enum InfixOp {
     NotEq
 }
 
-pub struct TokenNotInfixOp(pub TOKENTYPE);
+#[derive(Debug, PartialEq)]
+pub struct TokenNotInfixOpErr(TokenWithLocation);
 
-impl TryFrom<Token> for InfixOp {
-    type Error = TokenNotInfixOp;
+impl TryFrom<TokenWithLocation> for InfixOp {
+    type Error = TokenNotInfixOpErr;
 
-    fn try_from(value: Token) -> Result<Self, Self::Error> {
-        match value.token_type {
-            TOKENTYPE::PLUS => Ok(Self::Add),
-            TOKENTYPE::MINUS => Ok(Self::Sub),
-            TOKENTYPE::ASTERISK => Ok(Self::Mult),
-            TOKENTYPE::SLASH => Ok(Self::Div),
-            TOKENTYPE::LT => Ok(Self::Lt),
-            TOKENTYPE::GT => Ok(Self::Gt),
-            TOKENTYPE::EQ => Ok(Self::Eq),
-            TOKENTYPE::NOTEQ => Ok(Self::NotEq),
-            _ => Err(TokenNotInfixOp(value.token_type))
+    fn try_from(value: TokenWithLocation) -> Result<Self, Self::Error> {
+        match value.clone().to_token() {
+            Token::PLUS => Ok(Self::Add),
+            Token::MINUS => Ok(Self::Sub),
+            Token::ASTERISK => Ok(Self::Mult),
+            Token::SLASH => Ok(Self::Div),
+            Token::LT => Ok(Self::Lt),
+            Token::GT => Ok(Self::Gt),
+            Token::EQ => Ok(Self::Eq),
+            Token::NOTEQ => Ok(Self::NotEq),
+            _ => Err(TokenNotInfixOpErr(value))
         }
+    }
+}
+
+impl Display for TokenNotInfixOpErr {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Could not translate token {} to Infix Operand")
     }
 }
 
