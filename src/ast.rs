@@ -121,7 +121,7 @@ impl TryFrom<TokenWithLocation> for InfixOp {
 
 impl Display for TokenNotInfixOpErr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Could not translate token {} to Infix Operand")
+        write!(f, "Could not translate token {} to Infix Operand", self.0.ref_token())
     }
 }
 

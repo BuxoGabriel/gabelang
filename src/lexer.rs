@@ -153,30 +153,52 @@ impl TokenWithLocation {
     pub fn to_token(self) -> Token {
         self.0
     }
-    pub fn clone_location(self) -> Location {
+    pub fn clone_location(&self) -> Location {
         self.1.clone()
+    }
+    pub fn ref_token(&self) -> &Token {
+        &self.0
+    }
+    pub fn ref_location(&self) -> &Location {
+        &self.1
     }
 }
 
-#[derive(Debug, PartialEq)]
-pub enum LexerError {
+#[derive(Debug, PartialEq, Clone)]
+pub enum LexerErrorType {
     ParseIntErr(ParseIntError),
+    UnclosedString,
     IllegalToken
 }
 
-impl From<ParseIntError> for LexerError {
+impl From<ParseIntError> for LexerErrorType {
     fn from(value: ParseIntError) -> Self {
         Self::ParseIntErr(value)
     }
 }
 
-impl Display for LexerError {
+impl Display for LexerErrorType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("Lexer Error: ");
         match self {
             Self::ParseIntErr(err) => write!(f, "Error parsing number: {err}"),
+            Self::UnclosedString => write!(f, "Unclosed string could not be parsed."),
             Self::IllegalToken => write!(f, "Illegal character could not make valid token")
         }
+    }
+}
+
+/// Error type generated when lexing fails
+#[derive(Debug, PartialEq, Clone)]
+pub struct LexerError {
+    /// The type of error
+    pub error_type: LexerErrorType,
+    /// The location in the code where the error was discovered
+    pub location: Location
+}
+
+impl Display for LexerError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Lexer Error at line {} column {}: {}", self.location.line, self.location.position, self.error_type)
     }
 }
 
@@ -224,8 +246,27 @@ impl<'a> Lexer<'a> {
             token = Lexer::literal_keyword(&literal);
         }
         else if current_char.is_numeric() {
-            let value = self.read_number(current_char).parse::<isize>()?;
+            let value = match self.read_number(current_char).parse::<isize>() {
+                Ok(num) => num,
+                Err(err) => {
+                    return Err(self.error(err.into()));
+                }
+            };
             token = Token::INT(value);
+        } else if current_char == '"' {
+            let mut string = String::new();
+            let mut current_char = current_char;
+            while current_char != '"' {
+                match self.get_next_char() {
+                    Some(char) => {
+                        string.push(char);
+                        current_char = char;
+                    },
+                    None => return Err(self.error(LexerErrorType::UnclosedString)),
+                };
+            }
+            token = Token::STRING(string)
+
         } else {
             token = match current_char {
                 '=' => {
@@ -285,7 +326,10 @@ impl<'a> Lexer<'a> {
                 '}' => Token::RSQUIG,
                 '[' => Token::LSQR,
                 ']' => Token::RSQR,
-                _ => return Err(LexerError::IllegalToken)
+                _ => return Err(LexerError {
+                    error_type: LexerErrorType::IllegalToken,
+                    location
+                })
             };
         }
         Ok(Some(TokenWithLocation::new(token, location)))
@@ -338,6 +382,13 @@ impl<'a> Lexer<'a> {
             } else {
                 break
             }
+        }
+    }
+
+    fn error(&mut self, err: LexerErrorType) -> LexerError {
+        LexerError {
+            error_type: err,
+            location: self.location.clone()
         }
     }
 
@@ -432,7 +483,10 @@ mod tests {
     #[test]
     fn parse_illegal() {
         let input = String::from('~');
-        let expected_result = Err(LexerError::IllegalToken);
+        let expected_result = Err(LexerError{
+            error_type: LexerErrorType::IllegalToken,
+            location: Location { line: 1, position: 1 }
+        });
         let mut lexer = Lexer::new(&input);
         assert_eq!(expected_result, lexer.parse());
     }
