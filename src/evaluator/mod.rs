@@ -149,8 +149,17 @@ impl GabrEnv {
                 };
                 let arr = self.get_assignable_mut(array)?;
                 if let ObjectType::ARRAY(arr) = arr {
-                    arr[index as usize] = val;
-                    Ok(())
+                    if index < 0 {
+                        Err("Can not index array with negative index".to_string())
+                    } else if (index as usize) < arr.len() {
+                        arr[index as usize] = val;
+                        Ok(())
+                    } else if (index as usize) == arr.len() {
+                        arr.push(val);
+                        Ok(())
+                    } else {
+                        Err("Can not set array at an index greater than its length".to_string())
+                    }
                 } else {
                     Err("Can not index into non-array value".to_string())
                 }
@@ -298,6 +307,7 @@ impl GabrEnv {
             Expression::Literal(lit) => {
                 match lit {
                     Literal::NumberLit(num) => Ok(ObjectType::NUMBER(num.clone())),
+                    Literal::StringLit(string) => Ok(ObjectType::STRING(string.clone())),
                     Literal::ArrayLit(arr) => {
                         // Create an array of evaluated expressions
                         let arr: Vec<Result<ObjectType, String>> = arr.iter().map(|v| self.eval_expression(v)).collect();
@@ -486,6 +496,7 @@ impl Display for GabrValue {
 #[derive(Clone, Debug)]
 enum ObjectType {
     NUMBER(i64),
+    STRING(String),
     ARRAY(Vec<ObjectType>),
     FUNCTION(ast::Function),
     OBJECT(HashMap<String, ObjectType>),
@@ -506,6 +517,7 @@ impl Display for ObjectType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::NUMBER(val) => write!(f, "{val}"),
+            Self::STRING(string) => f.write_str(string),
             Self::ARRAY(vals) => {
                 write!(f, "[{}]", join(vals, ", "))
             },

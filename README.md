@@ -74,7 +74,6 @@ or run a script with
 cargo run -- --file [script name]
 ```
 
-
 ## Test
 
 Run tests with
@@ -89,7 +88,7 @@ cargo test
 - For Loops
 - Do While Loops
 - Better Documentation
-- Built in Functions(print, file, fetch)
+- Built in Functions(print, file, fetch, input)
 - Add tests to ast and eval modules
 - Add fun language syntax
 

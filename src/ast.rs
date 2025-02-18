@@ -77,6 +77,7 @@ pub enum Assignable {
 pub enum Literal {
     ArrayLit(Vec<Expression>),
     ObjectLit(Vec<(String, Expression)>),
+    StringLit(String),
     NumberLit(i64),
 }
 
@@ -156,6 +157,7 @@ impl Display for Literal {
             Self::ArrayLit(arr) => {
                 write!(f, "[{}]", join(arr, ", "))
             },
+            Self::StringLit(string) => f.write_str(string),
             Self::ObjectLit(obj) => {
                 let obj = obj.iter().map(|(ident, value)| {
                     let mut output = ident.clone();

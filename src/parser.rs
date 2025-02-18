@@ -332,6 +332,9 @@ impl<'a> Parser<'a> {
         if self.peek_token_is(&Token::LSQUIG)? {
             return Ok(ast::Expression::Literal(self.parse_object_literal()?))
         }
+        if let Some(Token::STRING(_)) = self.peek_next_token()? {
+            return Ok(ast::Expression::Literal(self.parse_string_literal()?))
+        }
         // Get "left side" of the expression
         let mut left_side: ast::Expression = self.parse_prefix()?;
         while !self.is_eof()? {
@@ -477,6 +480,16 @@ impl<'a> Parser<'a> {
         Ok(ast::Literal::ObjectLit(fields))
     }
 
+    // Precondition: Caller must make sure that current_token is a string token
+    fn parse_string_literal(&mut self) -> ParseResult<ast::Literal> {
+        let token = self.next_token()?;
+        if let Token::STRING(string) = token{
+            Ok(ast::Literal::StringLit(string))
+        } else {
+            Err(self.error(ParserErrorType::UnexpectedToken { expected_token: Token::STRING(String::new()), recieved_token: token }))
+        }
+    }
+
     // Precondition: Caller must check that current_token is a number
     fn parse_number(&mut self) -> ParseResult<ast::Literal> {
         let token = self.next_token()?;
@@ -553,15 +566,23 @@ mod tests {
     use super::*;
     #[test]
     fn let_statement() {
-        let input = String::from("let i = 12;");
+        let input = String::from("let i = 12; let greeting = \"hello\";");
         assert_eq!(
             Parser::new(&input).parse_program(),
-            Ok(vec![ast::Statement::Let {
-                ident: "i".to_string(),
-                expression: ast::Expression::Literal(
-                    ast::Literal::NumberLit(12)
-                )
-            }])
+            Ok(vec![
+                ast::Statement::Let {
+                    ident: "i".to_string(),
+                    expression: ast::Expression::Literal(
+                        ast::Literal::NumberLit(12)
+                    )
+                },
+                ast::Statement::Let {
+                    ident: "greeting".to_string(),
+                    expression: ast::Expression::Literal(
+                        ast::Literal::StringLit("hello".to_string())
+                    )
+                }
+            ])
         );
     }
 

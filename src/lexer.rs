@@ -255,12 +255,13 @@ impl<'a> Lexer<'a> {
             token = Token::INT(value);
         } else if current_char == '"' {
             let mut string = String::new();
-            let mut current_char = current_char;
-            while current_char != '"' {
+            loop {
                 match self.get_next_char() {
-                    Some(char) => {
-                        string.push(char);
-                        current_char = char;
+                    Some(current_char) => {
+                        if current_char == '"' {
+                            break;
+                        }
+                        string.push(current_char);
                     },
                     None => return Err(self.error(LexerErrorType::UnclosedString)),
                 };
@@ -503,6 +504,23 @@ mod tests {
             TokenWithLocation::new(Token::RETURN, Location{ line: 1, position: 22 }),
             TokenWithLocation::new(Token::TRUE, Location{ line: 1, position: 29 }),
             TokenWithLocation::new(Token::FALSE, Location{ line: 1, position: 34 }),
+        ]);
+        let mut lexer = Lexer::new(&input);
+        let tokens = lexer.parse();
+        assert_eq!(tokens, expected_tokens)
+    }
+
+    #[test]
+    fn parse_strings() {
+        let input = String::from("let my_string = \"hello\" + \"world\";");
+        let expected_tokens = Ok(vec![
+            TokenWithLocation::new(Token::LET, Location::default()),
+            TokenWithLocation::new(Token::IDENTIFIER("my_string".to_string()), Location { line: 1, position: 5 }),
+            TokenWithLocation::new(Token::EQUAL, Location { line: 1, position: 15 }),
+            TokenWithLocation::new(Token::STRING("hello".to_string()), Location { line: 1, position: 17 }),
+            TokenWithLocation::new(Token::PLUS, Location { line: 1, position: 25 }),
+            TokenWithLocation::new(Token::STRING("world".to_string()), Location { line: 1, position: 27 }),
+            TokenWithLocation::new(Token::SEMICOLON, Location { line: 1, position: 34 }),
         ]);
         let mut lexer = Lexer::new(&input);
         let tokens = lexer.parse();
