@@ -369,11 +369,18 @@ impl GabrEnv {
 
     fn eval_infix(&mut self, op: InfixOp, left: &Expression, right: &Expression) -> Result<ObjectType, String> {
         let op1 = self.eval_expression(left)?;
+        let op2 = self.eval_expression(right)?;
         let op1 = match op1 {
             ObjectType::NUMBER(num) => num,
+            ObjectType::STRING(string1) => {
+                if let ObjectType::STRING(string2) = op2 {
+                    return Ok(ObjectType::STRING(string1 + &string2));
+                } else {
+                    return Err(format!("Infix Evaluation Failed: can not concat a string with a non string value"))
+                }
+            }
             _ => return Err(format!("Infix Evaluation Failed: left operand did not evaluate to a number, expression: {:?} evaluated to {:?}", left, op1))
         };
-        let op2 = self.eval_expression(right)?;
         let op2 = match op2 {
             ObjectType::NUMBER(num) => num,
             _ => return Err(format!("Infix Evaluation Failed: left operand did not evaluate to a number, expression: {:?} evaluated to {:?}", right, op2))

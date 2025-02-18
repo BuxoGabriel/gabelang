@@ -345,9 +345,6 @@ impl<'a> Parser<'a> {
         if self.peek_token_is(&Token::LSQUIG)? {
             return Ok(ast::Expression::Literal(self.parse_object_literal()?))
         }
-        if let Some(Token::STRING(_)) = self.peek_next_token()? {
-            return Ok(ast::Expression::Literal(self.parse_string_literal()?))
-        }
         // Get "left side" of the expression
         let mut left_side: ast::Expression = self.parse_prefix()?;
         while !self.is_eof()? {
@@ -387,9 +384,10 @@ impl<'a> Parser<'a> {
                 }
             }
             Token::INT(_) => Ok(ast::Expression::Literal(self.parse_number()?)),
+            Token::STRING(_)=> Ok(ast::Expression::Literal(self.parse_string_literal()?)),
             token => {
                 Err(self.error(ParserErrorType::UnexpectedTokenOption { 
-                    expected_token_options: vec![Token::MINUS, Token::IDENTIFIER(String::new()), Token::INT(0)],
+                    expected_token_options: vec![Token::MINUS, Token::IDENTIFIER(String::new()), Token::INT(0), Token::STRING(String::new())],
                     recieved_token: token.clone()
                 }))
             }
