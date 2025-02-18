@@ -20,21 +20,19 @@ struct Len{}
 impl BuiltIn for Len {
     fn get_params(&self) -> Vec<String> {
         vec![
-            "_arr".to_string() 
+            "_obj".to_string() 
         ]
     }
 
     fn eval(&self, env: &mut GabrEnv) -> Result<ObjectType, String> {
-        let arr = env.get_var("_arr");
-        match arr {
-            Some(arr) => {
-                if let ObjectType::ARRAY(arr) = arr.clone() {
-                    Ok(ObjectType::NUMBER(arr.len() as i64))
-                } else {
-                    Err("Built-In \"len\" expected array value as argument".to_string())
-                }
-            },
-            None => Err("Built-In \"len\" expected did not recieve expected arg \"_arr\"".to_string())
+        let obj = env.get_var("_obj");
+        if obj.is_none() {
+            return Err("Built-In \"len\" expected did not recieve expected arg \"_arr\"".to_string())
+        };
+        match obj.unwrap() {
+            ObjectType::ARRAY(arr) => Ok(ObjectType::NUMBER(arr.len() as i64)),
+            ObjectType::STRING(string) => Ok(ObjectType::NUMBER(string.len() as i64)),
+            _ => Err("Built-In \"len\" expected array value as argument".to_string())
         }
     }
 

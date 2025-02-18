@@ -166,29 +166,42 @@ impl<'a> Parser<'a> {
             Token::LET => Ok(self.parse_let_statement()?),
             Token::IDENTIFIER(_) => {
                 let assignable = self.parse_assignable()?;
-                if let Some(token) = self.peek_next_token()? {
-                    match token {
-                        Token::EQUAL => Ok(self.parse_assign_statement(assignable)?),
-                        Token::LPAREN => Ok(ast::Statement::Expression(self.parse_function_call(assignable)?)),
-                        Token::SEMICOLON => {
-                            self.next_token()?;
-                            Ok(ast::Statement::Expression(ast::Expression::Assignable(assignable)))
-                        }
-                        _ => {
-                            let res = Ok(ast::Statement::Expression(self.parse_infix(ast::Expression::Assignable(assignable))?));
-                            self.skip_optional_token(&Token::SEMICOLON)?;
-                            res
-                        }
-                    }
-                } else {
-                    Ok(ast::Statement::Expression(ast::Expression::Assignable(assignable)))
-                }
+                Ok(self.parse_statement_after_assignable(assignable)?)
             },
             Token::WHILE => Ok(self.parse_while_loop()?),
             Token::IF => Ok(self.parse_if_statement()?),
             Token::RETURN => Ok(self.parse_return_statement()?),
             Token::FN => Ok(self.parse_function()?),
             _ => Ok(self.parse_expression_statement()?)
+        }
+    }
+
+    fn parse_statement_after_assignable(&mut self, assignable: ast::Assignable) -> ParseResult<ast::Statement> {
+        if let Some(token) = self.peek_next_token()? {
+            match token {
+                Token::EQUAL => Ok(self.parse_assign_statement(assignable)?),
+                Token::LPAREN => {
+                    let func_call = self.parse_function_call(assignable)?;
+                    if self.is_eof()? || self.peek_token_is(&Token::SEMICOLON)? {
+                        return Ok(ast::Statement::Expression(func_call))
+                    }
+                    let expression = self.parse_infix(func_call)?;
+                    let res = Ok(ast::Statement::Expression(expression));
+                    self.skip_optional_token(&Token::SEMICOLON)?;
+                    res
+                },
+                Token::SEMICOLON => {
+                    self.next_token()?;
+                    Ok(ast::Statement::Expression(ast::Expression::Assignable(assignable)))
+                }
+                _ => {
+                    let expression = self.parse_infix(ast::Expression::Assignable(assignable))?;
+                    self.skip_optional_token(&Token::SEMICOLON)?;
+                    Ok(ast::Statement::Expression(expression))
+                }
+            }
+        } else {
+            Ok(ast::Statement::Expression(ast::Expression::Assignable(assignable)))
         }
     }
 
