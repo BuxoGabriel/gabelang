@@ -300,12 +300,12 @@ impl<'a> Lexer<'a> {
                 '/' => {
                     if let Some(next_char) = self.peek_next_char() {
                         if *next_char == '/' {
-                            while let Some(char) = self.get_next_char() {
-                                if char != '\n' {
-                                    self.get_next_char();
-                                } else {
+                            self.get_next_char();
+                            while let Some(char) = self.peek_next_char() {
+                                if *char == '\n' {
                                     break;
                                 }
+                                self.get_next_char();
                             }
                             return self.get_next_token()
                         } else {

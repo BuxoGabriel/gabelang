@@ -33,11 +33,11 @@ impl BuiltIn for Len {
             return Err("Built-In \"len\" did not recieve expected arg \"_arr\"".to_string())
         };
         let obj = obj.unwrap();
-        let obj = &mut *obj.inner();
+        let obj = &*obj.inner();
         match obj {
             ObjectInner::ARRAY(arr) => Ok(ObjectInner::NUMBER(arr.len() as i64).as_object()),
             ObjectInner::STRING(string) => Ok(ObjectInner::NUMBER(string.len() as i64).as_object()),
-            _ => Err("Built-In \"len\" expected array value as argument".to_string())
+            _ => Err("Built-In \"len\" expected array or string as first argument".to_string())
         }
     }
 
@@ -46,6 +46,7 @@ impl BuiltIn for Len {
     }
 }
 
+// returns a new reversed array object without altering parameter
 struct Reverse{}
 
 impl BuiltIn for Reverse {
@@ -60,11 +61,11 @@ impl BuiltIn for Reverse {
             return Err("Built-In \"reverse\" did not recieve expected arg \"_obj\"".to_string())
         }
         let obj = obj.unwrap();
-        let obj = &mut *obj.inner();
+        let obj = &*obj.inner();
         match obj {
             ObjectInner::STRING(string) => Ok(ObjectInner::STRING(string.chars().rev().collect()).as_object()),
             ObjectInner::ARRAY(arr) => Ok(ObjectInner::ARRAY(arr.clone().into_iter().rev().collect()).as_object()),
-            _ => Err("Built-In \"reverse\" expects first arg\"str\" to be of type string".to_string())
+            _ => Err("Built-In \"reverse\" expects first arg\"str\" to be of type string or array".to_string())
         }
     }
     fn as_built_in(self) -> Rc<dyn BuiltIn> {

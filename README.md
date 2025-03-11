@@ -51,10 +51,17 @@ fn double_num(num) {
 
 ## Built in Functions
 
-**len(arr) -> number**
+**len(obj) -> number**
 
-- returns the length of an array
-- throws an error if provided with something other than an array
+- returns the length of an array or string
+- throws an error if provided with something other than an array or string
+
+___
+
+**reverse(obj) -> number**
+
+- returns a new reversed array or string without changing the parameter object
+- throws an error if provided with something other than an array or string
 
 ## Build
 
