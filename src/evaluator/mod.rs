@@ -1,7 +1,7 @@
 use std::fmt::{ Display, Write };
 use std::rc::Rc;
 use std::cell::{RefCell, RefMut};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 mod built_ins;
 
