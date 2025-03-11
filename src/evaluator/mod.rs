@@ -30,7 +30,7 @@ impl GabrEnv {
     /// declared in previous eval_program calls. To run a statement without creating a new stack
     /// frame look for [Self::eval_statement]
     pub fn eval_program(&mut self, program: &Vec<ast::Statement>) -> Result<GabrValue, String> {
-        let mut result = GabrValue::new(ObjectInner::NULL, false);
+        let mut result = GabrValue::new(ObjectInner::NULL.as_object(), false);
         self.push_scope();
         for statement in program.iter() {
             result = self.eval_statement(statement)?;
@@ -172,24 +172,24 @@ impl GabrEnv {
     pub fn eval_statement(&mut self, statement: &Statement) -> Result<GabrValue, String> {
         match statement {
             Statement::Expression(expression) => {
-                Ok(GabrValue::new(self.eval_expression(expression)?.inner().clone(), true))
+                Ok(GabrValue::new(self.eval_expression(expression)?, true))
             },
             Statement::Let { ident, expression } => {
                 let val = self.eval_expression(expression)?;
                 self.create_var(ident.clone(), val);
-                Ok(GabrValue::new(ObjectInner::NULL, false))
+                Ok(GabrValue::new(ObjectInner::NULL.as_object(), false))
             },
             Statement::Assign { assignable, expression } => {
                 let val = self.eval_expression(expression)?;
                 self.set_assignable(assignable, val)?;
-                Ok(GabrValue::new(ObjectInner::NULL, false))
+                Ok(GabrValue::new(ObjectInner::NULL.as_object(), false))
             },
             Statement::Return(val) => {
                 match val.as_ref() {
                     Some(value) => {
-                        Ok(GabrValue::new(self.eval_expression(value)?.inner().clone(), true))
+                        Ok(GabrValue::new(self.eval_expression(value)?, true))
                     },
-                    None => Ok(GabrValue::new(ObjectInner::NULL, true))
+                    None => Ok(GabrValue::new(ObjectInner::NULL.as_object(), true))
                 }
             },
             Statement::If { cond, body, r#else } => {
@@ -199,12 +199,12 @@ impl GabrEnv {
                 } else {
                     match r#else.as_ref() {
                         Some(else_block) => self.eval_program(else_block),
-                        None => Ok(GabrValue::new(ObjectInner::NULL, false))
+                        None => Ok(GabrValue::new(ObjectInner::NULL.as_object(), false))
                     }
                 }
             },
             Statement::While { cond, body } => {
-                let mut result = GabrValue::new(ObjectInner::NULL, false);
+                let mut result = GabrValue::new(ObjectInner::NULL.as_object(), false);
                 while self.eval_expression(cond)?.inner().is_truthy() {
                     result = self.eval_program(body)?;
                     if result.returning {
@@ -215,7 +215,7 @@ impl GabrEnv {
             },
             Statement::FuncDecl(func) => {
                 self.create_func(func.ident.clone(), func.clone());
-                Ok(GabrValue::new(ObjectInner::NULL, false))
+                Ok(GabrValue::new(ObjectInner::NULL.as_object(), false))
             },
         }
     }
@@ -417,7 +417,7 @@ impl GabrEnv {
             // Remove param variables scope
             self.pop_scope();
             // Function call should not automatically be interpretted as return funcCall(param);
-            Ok(result.gabr_object.as_object())
+            Ok(result.gabr_object)
         } else {
             let func_name = match func_locator {
                 Assignable::Var(ident) => ident,
@@ -449,18 +449,18 @@ impl GabrEnv {
 /// Could be an integer, array, function, object, or NULL type
 #[derive(Clone)]
 pub struct GabrValue {
-    gabr_object: ObjectInner,
+    gabr_object: Object,
     returning: bool,
 }
 
 impl GabrValue {
-    fn new(gabr_object: ObjectInner, returning: bool) -> Self {
+    fn new(gabr_object: Object, returning: bool) -> Self {
         Self { gabr_object, returning }
     }
 
     /// Checks if the current object is not null
     pub fn is_some(&self) -> bool {
-        if let ObjectInner::NULL = self.gabr_object {
+        if let ObjectInner::NULL = *self.gabr_object.inner() {
             false
         } else {
             true
@@ -485,18 +485,13 @@ impl Object {
 
 impl Display for Object {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        thread_local! {
-            static SEEN: RefCell<HashSet<usize>> = RefCell::new(HashSet::new());
+        if Rc::weak_count(&self.0) == 0 {
+            let weak = Rc::downgrade(&self.0);
+            let res = write!(f, "{}", self.inner());
+            drop(weak);
+            return res;
         }
-
-        let ptr = Rc::as_ptr(&self.0) as usize;
-        if SEEN.with(|seen| seen.borrow().contains(&ptr)) {
-            return f.write_str("Cycle");
-        }
-        SEEN.with(|seen| seen.borrow_mut().insert(ptr));
-        let res = write!(f, "{}", self.inner());
-        SEEN.with(|seen| seen.borrow_mut().remove(&ptr));
-        return res;
+        return f.write_str("Cycle");
     }
 }
 
