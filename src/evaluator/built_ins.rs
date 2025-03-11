@@ -1,7 +1,9 @@
 use std::rc::Rc;
 use std::collections::HashMap;
 
-use crate::evaluator::{GabrEnv, ObjectType};
+use crate::evaluator::{GabrEnv, Object};
+
+use super::ObjectInner;
 
 pub fn load_built_ins() -> HashMap<String, Rc<dyn BuiltIn>> {
     let mut hash_map = HashMap::new();
@@ -12,7 +14,7 @@ pub fn load_built_ins() -> HashMap<String, Rc<dyn BuiltIn>> {
 
 pub trait BuiltIn {
     fn get_params(&self) -> Vec<String>;
-    fn eval(&self, env: &mut GabrEnv) -> Result<ObjectType, String>;
+    fn eval(&self, env: &mut GabrEnv) -> Result<Object, String>;
     fn as_built_in(self) -> Rc<dyn BuiltIn>;
 }
 
@@ -25,14 +27,16 @@ impl BuiltIn for Len {
         ]
     }
 
-    fn eval(&self, env: &mut GabrEnv) -> Result<ObjectType, String> {
+    fn eval(&self, env: &mut GabrEnv) -> Result<Object, String> {
         let obj = env.get_var("_obj");
         if obj.is_none() {
             return Err("Built-In \"len\" did not recieve expected arg \"_arr\"".to_string())
         };
-        match obj.unwrap() {
-            ObjectType::ARRAY(arr) => Ok(ObjectType::NUMBER(arr.len() as i64)),
-            ObjectType::STRING(string) => Ok(ObjectType::NUMBER(string.len() as i64)),
+        let obj = obj.unwrap();
+        let obj = &mut *obj.inner();
+        match obj {
+            ObjectInner::ARRAY(arr) => Ok(ObjectInner::NUMBER(arr.len() as i64).as_object()),
+            ObjectInner::STRING(string) => Ok(ObjectInner::NUMBER(string.len() as i64).as_object()),
             _ => Err("Built-In \"len\" expected array value as argument".to_string())
         }
     }
@@ -50,14 +54,16 @@ impl BuiltIn for Reverse {
             "_obj".to_string(),
         ]
     }
-    fn eval(&self, env: &mut GabrEnv) -> Result<ObjectType, String> {
-        let object = env.get_var("_obj");
-        if object.is_none() {
+    fn eval(&self, env: &mut GabrEnv) -> Result<Object, String> {
+        let obj = env.get_var("_obj");
+        if obj.is_none() {
             return Err("Built-In \"reverse\" did not recieve expected arg \"_obj\"".to_string())
         }
-        match object.unwrap() {
-            ObjectType::STRING(string) => Ok(ObjectType::STRING(string.chars().rev().collect())),
-            ObjectType::ARRAY(arr) => Ok(ObjectType::ARRAY(arr.clone().into_iter().rev().collect())),
+        let obj = obj.unwrap();
+        let obj = &mut *obj.inner();
+        match obj {
+            ObjectInner::STRING(string) => Ok(ObjectInner::STRING(string.chars().rev().collect()).as_object()),
+            ObjectInner::ARRAY(arr) => Ok(ObjectInner::ARRAY(arr.clone().into_iter().rev().collect()).as_object()),
             _ => Err("Built-In \"reverse\" expects first arg\"str\" to be of type string".to_string())
         }
     }
