@@ -153,21 +153,24 @@ impl TokenWithLocation {
     pub fn to_token(self) -> Token {
         self.0
     }
-    pub fn clone_location(&self) -> Location {
-        self.1.clone()
-    }
+    /// Returns a reference to Token component
     pub fn ref_token(&self) -> &Token {
         &self.0
     }
+    /// Returns a reference to Location component
     pub fn ref_location(&self) -> &Location {
         &self.1
     }
 }
 
+/// Error type when Lexer fails parse input text
 #[derive(Debug, PartialEq, Clone)]
 pub enum LexerErrorType {
+    /// Error indicates failed to parse number in input into an integer
     ParseIntErr(ParseIntError),
+    /// Error indicates input has a string that was never closed
     UnclosedString,
+    /// Error indicates Lexer encountered unexpected token while processing input
     IllegalToken
 }
 

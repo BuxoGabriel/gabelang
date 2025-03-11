@@ -81,7 +81,7 @@ impl<'a> Parser<'a> {
         match self.token_iter.next() {
             Some(token) => {
                 let token = token?;
-                self.location = token.clone_location();
+                self.location = token.ref_location().clone();
                 Ok(token.to_token())
             },
             None => Err(self.error(ParserErrorType::UnexpectedEOF))

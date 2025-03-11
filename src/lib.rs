@@ -1,3 +1,4 @@
+#![warn(missing_docs)]
 #![doc(html_favicon_url = "https://buxogabriel.vercel.app/favicon.ico")]
 #![doc(html_logo_url = "https://buxogabriel.vercel.app/apple-touch-icon.png")]
 
