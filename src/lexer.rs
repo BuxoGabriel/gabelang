@@ -244,7 +244,7 @@ impl<'a> Lexer<'a> {
         }
         let current_char = current_char.unwrap();
         // There is a next char
-        if Lexer::is_alpha(current_char) {
+        if current_char.is_alphabetic() {
             let literal = self.read_identifier(current_char);
             token = Lexer::literal_keyword(&literal);
         }
@@ -352,7 +352,7 @@ impl<'a> Lexer<'a> {
         let mut identifier = String::new();
         identifier.push(first_char);
         while let Some(char) = self.peek_next_char() {
-            if Lexer::is_alpha(*char) {
+            if char.is_alphabetic() || char.is_numeric() || *char == '_'{
                 identifier.push(self.get_next_char().unwrap());
             } else {
                 break;
@@ -394,10 +394,6 @@ impl<'a> Lexer<'a> {
             error_type: err,
             location: self.location.clone()
         }
-    }
-
-    fn is_alpha(c: char) -> bool {
-        c.is_alphabetic() || c == '_'
     }
 
     fn literal_keyword(literal: &str) -> Token {
@@ -447,10 +443,10 @@ mod tests {
 
     #[test]
     fn parse_identifiers() {
-        let input = String::from("Hello wo_rld");
+        let input = String::from("Hello w0_rld");
         let expected_tokens = Ok(vec![
             TokenWithLocation::new(Token::IDENTIFIER(String::from("Hello")), Location::default()),
-            TokenWithLocation::new(Token::IDENTIFIER(String::from("wo_rld")), Location { line: 1, position: 7 }),
+            TokenWithLocation::new(Token::IDENTIFIER(String::from("w0_rld")), Location { line: 1, position: 7 }),
         ]);
         let mut lexer = Lexer::new(&input);
         let tokens = lexer.parse();
@@ -532,10 +528,10 @@ mod tests {
 
     #[test]
     fn parse_everything() {
-        let input = String::from("fn plus_one(foo) {\n\tlet number = foo + 1; number\n}");
+        let input = String::from("fn plus_1(foo) {\n\tlet number = foo + 1; number\n}");
         let expected_tokens = Ok(vec![
             TokenWithLocation::new(Token::FN, Location::default()),
-            TokenWithLocation::new(Token::IDENTIFIER(String::from("plus_one")), Location { line: 1, position: 4 }),
+            TokenWithLocation::new(Token::IDENTIFIER(String::from("plus_1")), Location { line: 1, position: 4 }),
             TokenWithLocation::new(Token::LPAREN, Location { line: 1, position: 12 }),
             TokenWithLocation::new(Token::IDENTIFIER(String::from("foo")), Location { line: 1, position: 13 }),
             TokenWithLocation::new(Token::RPAREN, Location { line: 1, position: 16 }),
