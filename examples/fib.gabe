@@ -1,0 +1,33 @@
+let FIBNUMBERS = 20;
+
+fn fib(x) {
+    // first fibonacci number is 0
+    if(x == 0) {
+        return 0;
+    }
+    // initialize first 2 fib numbers
+    let a = 0;
+    let b = 1;
+    // for every fib number after the first add previous 2 numbers together to get new fib number
+    while(x > 1) {
+        let temp = b;
+        b = a + b;
+        a = temp;
+        x = x - 1;
+    }
+    return b;
+}
+
+fn first_n_fib(x) {
+    let arr = [];
+    let i = 0;
+    while(i < x) {
+        arr[i] = fib(i);
+        i = i + 1;
+    }
+    return arr;
+}
+
+let i = first_n_fib(FIBNUMBERS);
+
+return i;
