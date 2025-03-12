@@ -54,6 +54,7 @@ fn double_num(num) {
 **len(obj) -> number**
 
 - returns the length of an array or string
+- returns the amount of keys in an object
 - throws an error if provided with something other than an array or string
 
 ___
@@ -90,7 +91,6 @@ cargo test
 
 ## Todo
 
-- String Type
 - Object get and set/string indexing
 - For Loops
 - Do While Loops

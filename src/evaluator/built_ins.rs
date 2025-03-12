@@ -36,8 +36,9 @@ impl BuiltIn for Len {
         let obj = &*obj.inner();
         match obj {
             ObjectInner::ARRAY(arr) => Ok(ObjectInner::NUMBER(arr.len() as i64).as_object()),
+            ObjectInner::OBJECT(map) => Ok(ObjectInner::NUMBER(map.keys().len() as i64).as_object()),
             ObjectInner::STRING(string) => Ok(ObjectInner::NUMBER(string.len() as i64).as_object()),
-            _ => Err("Built-In \"len\" expected array or string as first argument".to_string())
+            _ => Err("Built-In \"len\" expected array, object or string as first argument".to_string())
         }
     }
 

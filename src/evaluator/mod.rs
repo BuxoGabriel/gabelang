@@ -138,7 +138,7 @@ impl GabrEnv {
                 let obj = self.get_assignable(obj)?;
                 let obj_mut: &mut ObjectInner = &mut obj.inner();
                 if let ObjectInner::OBJECT(obj) = obj_mut {
-                    obj.insert(prop.clone(), val).ok_or("Property does not exist on this object".to_string())?;
+                    obj.insert(prop.clone(), val);
                     Ok(())
                 } else {
                     Err("Can not get property of non-object value".to_string())
