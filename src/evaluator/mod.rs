@@ -69,18 +69,29 @@ impl GabrEnv {
     fn get_assignable(&mut self, assignable: &Assignable) -> Result<Object, String> {
         match assignable {
             Assignable::Var(var) => self.get_var(&var).ok_or("Could not find variable in any scope".to_string()),
-            Assignable::ArrayIndex { array, index } => {
+            Assignable::PropIndex { obj, index } => {
                 let index = self.eval_expression(index)?;
-                let index = match *index.inner() {
-                    ObjectInner::NUMBER(num) => num,
-                    _ => return Err("can not index array with non-number value".to_string())
-                };
-                let arr = self.get_assignable(array)?;
-                let arr = arr.inner().clone();
-                if let ObjectInner::ARRAY(arr) = arr {
-                    return Ok(arr[index as usize].clone())
-                } else {
-                    Err("Can not index into non-array value".to_string())
+                let obj = self.get_assignable(obj)?;
+                let index: &ObjectInner = &index.inner();
+                match index {
+                    ObjectInner::NUMBER(num) => {
+                        let arr = obj.inner().clone();
+                        if let ObjectInner::ARRAY(arr) = arr {
+                            Ok(arr[*num as usize].clone())
+                        } else {
+                            Err("Can not index into non-array with a number".to_string())
+                        }
+                    },
+                    ObjectInner::STRING(prop) => {
+                        // If indexing an object by string expect to 
+                        let obj = obj.inner().clone();
+                        if let ObjectInner::OBJECT(obj) = obj {
+                            Ok(obj.get(prop).map(|obj| obj.clone()).unwrap_or(ObjectInner::NULL.as_object()))
+                        } else {
+                            Err("Can not index into non-object with a string".to_string())
+                        }
+                    }
+                    _ => Err("can not index by non-number and non string value".to_string())
                 }
             },
             Assignable::ObjectProp { obj, prop } => {
@@ -110,28 +121,41 @@ impl GabrEnv {
             Assignable::Var(var) => {
                 self.set_var(&var, val)
             },
-            Assignable::ArrayIndex { array, index } => {
+            Assignable::PropIndex { obj, index } => {
                 let index = self.eval_expression(index)?;
-                let index = match *index.inner() {
-                    ObjectInner::NUMBER(num) => num,
-                    _ => return Err("Can not index string with non number value".to_string())
-                };
-                let arr = self.get_assignable(array)?;
-                let arr_mut: &mut ObjectInner = &mut arr.inner();
-                if let ObjectInner::ARRAY(arr) = arr_mut {
-                    if index < 0 {
-                        Err("Can not index array with negative index".to_string())
-                    } else if (index as usize) < arr.len() {
-                        arr[index as usize] = val;
-                        Ok(())
-                    } else if (index as usize) == arr.len() {
-                        arr.push(val);
-                        Ok(())
-                    } else {
-                        Err("Can not set array at an index greater than its length".to_string())
+                let index: &ObjectInner = &index.inner();
+                match index {
+                    ObjectInner::NUMBER(num) => {
+                        let num = *num;
+                        let arr = self.get_assignable(obj)?;
+                        let arr_mut: &mut ObjectInner = &mut arr.inner();
+                        if let ObjectInner::ARRAY(arr) = arr_mut {
+                            if num < 0 {
+                                Err("Can not index array with negative index".to_string())
+                            } else if (num as usize) < arr.len() {
+                                arr[num as usize] = val;
+                                Ok(())
+                            } else if (num as usize) == arr.len() {
+                                arr.push(val);
+                                Ok(())
+                            } else {
+                                Err("Can not set array at an index greater than its length".to_string())
+                            }
+                        } else {
+                            Err("Can not index non-array value by a number".to_string())
+                        }
+                    },
+                    ObjectInner::STRING(prop) => {
+                        let obj = self.get_assignable(obj)?;
+                        let obj_mut: &mut ObjectInner = &mut obj.inner();
+                        if let ObjectInner::OBJECT(obj) = obj_mut {
+                            obj.insert(prop.clone(), val);
+                            Ok(())
+                        } else {
+                            Err("Can not index non-array value by a number".to_string())
+                        }
                     }
-                } else {
-                    Err("Can not index into non-array value".to_string())
+                    _ => return Err("Can not index string with non number value".to_string())
                 }
             },
             Assignable::ObjectProp { obj, prop } => {
@@ -234,48 +258,8 @@ impl GabrEnv {
             Expression::FuncCall { func, params } => {
                 self.eval_function_call(func, params)
             },
-            Expression::Assignable(val) => {
-                match val {
-                    Assignable::Var(var) => {
-                        if let Some(val) = self.get_var(var) {
-                            Ok(val.clone())
-                        } else {
-                            Err("Referenced Identifier could not be found".to_string())
-                        }
-                    },
-                    Assignable::ArrayIndex { array, index } => {
-                        let index = self.eval_expression(index)?.inner().clone();
-                        let index = match index {
-                            ObjectInner::NUMBER(val) => val,
-                            _ => {
-                                return Err("Invalid Array Index: Can not index array by non integer value".to_string())
-                            }
-                        };
-                        let arr = self.get_assignable(array)?;
-                        let arr = &*arr.inner();
-                        if let ObjectInner::ARRAY(vals) = arr {
-                            match vals.get(index as usize) {
-                                Some(val) => Ok(val.clone()),
-                                None => Err("Invalid Array Index: Array indexed out of bounds".to_string()),
-                            }
-                        } else {
-                            Err(format!("Variable \"{}\" is not an array and can not be indexed as such", arr))
-                        }
-                    },
-                    Assignable::ObjectProp { obj , prop } => {
-                        let obj = self.get_assignable(obj)?;
-                        let obj = &*obj.inner();
-                        if let ObjectInner::OBJECT(obj) = obj {
-                            if let Some(prop) = obj.get(prop) {
-                                Ok(prop.clone())
-                            } else {
-                                Err(format!("Invalid Object Property: Property {} not found", prop))
-                            }
-                        } else {
-                            Err(format!("Variable \"{}\" is not an object and does not have properties", prop))
-                        }
-                    },
-                }
+            Expression::Assignable(assignable) => {
+                self.get_assignable(assignable)
             },
             Expression::Literal(lit) => {
                 match lit {

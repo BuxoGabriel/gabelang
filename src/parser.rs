@@ -425,8 +425,8 @@ impl<'a> Parser<'a> {
                     let index = Box::from(self.parse_expression(0)?);
                     // Array index is invalid if it is not closed
                     self.expect_token(Token::RSQR)?;
-                    assignable = ast::Assignable::ArrayIndex {
-                        array: Box::from(assignable), 
+                    assignable = ast::Assignable::PropIndex {
+                        obj: Box::from(assignable), 
                         index
                     }
                 },
@@ -725,8 +725,8 @@ mod tests {
                 left: Box::from(ast::Expression::Literal(ast::Literal::NumberLit(2))),
                 right:Box::from(ast::Expression::FuncCall {
                     func: ast::Assignable::Var(String::from("times_two")),
-                    params: vec![ast::Expression::Assignable(ast::Assignable::ArrayIndex{
-                        array: Box::from(ast::Assignable::Var(String::from("num"))),
+                    params: vec![ast::Expression::Assignable(ast::Assignable::PropIndex {
+                        obj: Box::from(ast::Assignable::Var(String::from("num"))),
                         index: Box::from(ast::Expression::Literal(ast::Literal::NumberLit(2)))
                     })]
                 }),

@@ -91,7 +91,6 @@ cargo test
 
 ## Todo
 
-- Object get and set/string indexing
 - For Loops
 - Do While Loops
 - Better Documentation

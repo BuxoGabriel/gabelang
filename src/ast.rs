@@ -62,8 +62,8 @@ pub enum Expression {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Assignable {
     Var(String),
-    ArrayIndex {
-        array: Box<Self>,
+    PropIndex {
+        obj: Box<Self>,
         index: Box<Expression>
     },
     ObjectProp {
@@ -175,7 +175,7 @@ impl Display for Assignable {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Var(var) => write!(f, "{var}"),
-            Self::ArrayIndex { array, index } => write!(f, "{array}[{index}]"),
+            Self::PropIndex { obj, index } => write!(f, "{obj}[{index}]"),
             Self::ObjectProp { obj, prop } => write!(f, "{obj}.{prop}")
         }
     }
