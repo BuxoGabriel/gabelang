@@ -422,6 +422,7 @@ impl<'a> Parser<'a> {
             }
             Token::INT(_) => Ok(ast::Expression::Literal(self.parse_number()?)),
             Token::STRING(_)=> Ok(ast::Expression::Literal(self.parse_string_literal()?)),
+            Token::BOOL(_) => Ok(ast::Expression::Literal(self.parse_bool_literal()?)),
             token => {
                 Err(self.error(ParserErrorType::UnexpectedTokenOption { 
                     expected_token_options: vec![Token::MINUS, Token::IDENTIFIER(String::new()), Token::INT(0), Token::STRING(String::new())],
@@ -531,8 +532,17 @@ impl<'a> Parser<'a> {
     // Precondition: Caller must make sure that current_token is a string token
     fn parse_string_literal(&mut self) -> ParseResult<ast::Literal> {
         let token = self.next_token()?;
-        if let Token::STRING(string) = token{
+        if let Token::STRING(string) = token {
             Ok(ast::Literal::StringLit(string))
+        } else {
+            Err(self.error(ParserErrorType::UnexpectedToken { expected_token: Token::STRING(String::new()), recieved_token: token }))
+        }
+    }
+
+    fn parse_bool_literal(&mut self) -> ParseResult<ast::Literal> {
+        let token = self.next_token()?;
+        if let Token::BOOL(bool) = token {
+            Ok(ast::Literal::Bool(bool))
         } else {
             Err(self.error(ParserErrorType::UnexpectedToken { expected_token: Token::STRING(String::new()), recieved_token: token }))
         }

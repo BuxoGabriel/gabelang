@@ -64,10 +64,8 @@ pub enum Token {
     ELSE,
     /// Maps to return
     RETURN,
-    /// Maps to true
-    TRUE,
-    /// Maps to false
-    FALSE,
+    /// Maps to true or false
+    BOOL(bool),
     /// Maps to any positive integer
     INT(isize),
     /// Maps to any label that starts with an alphabetical character and only contains alphabetical
@@ -118,8 +116,7 @@ impl Display for Token {
             Self::IF => f.write_str("if"),
             Self::ELSE => f.write_str("else"),
             Self::RETURN => f.write_str("return"),
-            Self::TRUE => f.write_str("true"),
-            Self::FALSE => f.write_str("false"),
+            Self::BOOL(bool) => f.write_str("{bool}"),
             Self::INT(val) => write!(f, "Int({})", val),
             Self::IDENTIFIER(string) => write!(f, "IDENTIFIER({})", string),
         }
@@ -412,8 +409,8 @@ impl<'a> Lexer<'a> {
             "for" => Token::FOR,
             "if" => Token::IF,
             "else" => Token::ELSE,
-            "True" => Token::TRUE,
-            "False" => Token::FALSE,
+            "True" => Token::BOOL(true),
+            "False" => Token::BOOL(false),
         _ => Token::IDENTIFIER(String::from(literal))
         }
     }
@@ -527,8 +524,8 @@ mod tests {
             TokenWithLocation::new(Token::ELSE, Location{ line: 1, position: 17 }),
             TokenWithLocation::new(Token::RETURN, Location{ line: 1, position: 22 }),
             TokenWithLocation::new(Token::FOR, Location{ line: 1, position: 29 }),
-            TokenWithLocation::new(Token::TRUE, Location{ line: 1, position: 33 }),
-            TokenWithLocation::new(Token::FALSE, Location{ line: 1, position: 38 }),
+            TokenWithLocation::new(Token::BOOL(true), Location{ line: 1, position: 33 }),
+            TokenWithLocation::new(Token::BOOL(false), Location{ line: 1, position: 38 }),
         ]);
         let mut lexer = Lexer::new(&input);
         let tokens = lexer.parse();

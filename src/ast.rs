@@ -89,6 +89,7 @@ pub enum Literal {
     ObjectLit(Vec<(String, Expression)>),
     StringLit(String),
     NumberLit(i64),
+    Bool(bool),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -176,7 +177,8 @@ impl Display for Literal {
                     output
                 }).collect::<Vec<String>>().join(", ");
                 write!(f, "{{{obj}}}")
-            }
+            },
+            Self::Bool(bool) => f.write_str("{bool}"),
         }
     }
 }

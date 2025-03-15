@@ -290,6 +290,7 @@ impl GabrEnv {
                 match lit {
                     Literal::NumberLit(num) => Ok(ObjectInner::NUMBER(num.clone()).as_object()),
                     Literal::StringLit(string) => Ok(ObjectInner::STRING(string.clone()).as_object()),
+                    Literal::Bool(bool) => Ok(ObjectInner::BOOL(*bool).as_object()),
                     Literal::ArrayLit(arr) => {
                         // Create an array of evaluated expressions
                         let arr: Vec<Result<Object, String>> = arr.iter().map(|v| self.eval_expression(v)).collect();
@@ -354,6 +355,7 @@ impl GabrEnv {
         let op2 = self.eval_expression(right)?.inner().clone();
         let op1 = match op1 {
             ObjectInner::NUMBER(num) => num,
+            ObjectInner::BOOL(bool) => bool as i64,
             ObjectInner::STRING(string1) => {
                 if let ObjectInner::STRING(string2) = op2 {
                     return Ok(ObjectInner::STRING(string1 + &string2).as_object());
@@ -361,11 +363,12 @@ impl GabrEnv {
                     return Err(format!("Infix Evaluation Failed: can not concat a string with a non string value"))
                 }
             }
-            _ => return Err(format!("Infix Evaluation Failed: left operand did not evaluate to a number, expression: {:?} evaluated to {:?}", left, op1))
+            _ => return Err(format!("Infix Evaluation Failed: left operand did not evaluate to a number or bool, expression: {:?} evaluated to {:?}", left, op1))
         };
         let op2 = match op2 {
             ObjectInner::NUMBER(num) => num,
-            _ => return Err(format!("Infix Evaluation Failed: left operand did not evaluate to a number, expression: {:?} evaluated to {:?}", right, op2))
+            ObjectInner::BOOL(bool) => bool as i64,
+            _ => return Err(format!("Infix Evaluation Failed: left operand did not evaluate to a number or bool, expression: {:?} evaluated to {:?}", right, op2))
         };
         let val = match op {
             InfixOp::Add => op1 + op2,
@@ -511,6 +514,7 @@ enum ObjectInner {
     ARRAY(Vec<Object>),
     FUNCTION(ast::Function),
     OBJECT(HashMap<String, Object>),
+    BOOL(bool),
     NULL
 }
 
@@ -519,6 +523,7 @@ impl ObjectInner {
         match self {
             Self::NUMBER(val) => *val != 0,
             Self::NULL => false,
+            Self::BOOL(b) if !*b => false,
             _ => true
         }
     }
@@ -547,6 +552,7 @@ impl Display for ObjectInner {
             Self::FUNCTION(func) => {
                 write!(f, "(Function: {})", func)
             },
+            Self::BOOL(bool) => write!(f, "{}", bool),
             Self::NULL => f.write_str("null")
         }
     }
