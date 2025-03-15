@@ -232,11 +232,25 @@ impl GabrEnv {
                 while self.eval_expression(cond)?.inner().is_truthy() {
                     result = self.eval_program(body)?;
                     if result.returning {
-                        return Ok(result)
+                        break;
                     }
                 }
                 Ok(result)
             },
+            Statement::For { init, cond, update, body } => {
+                let mut result = GabrValue::new(ObjectInner::NULL.as_object(), false);
+                self.push_scope();
+                self.eval_statement(init)?;
+                while self.eval_expression(cond)?.inner().is_truthy() {
+                    result = self.eval_program(body)?;
+                    self.eval_statement(update)?;
+                    if result.returning {
+                        break;
+                    }
+                }
+                self.pop_scope();
+                Ok(result)
+            }
             Statement::FuncDecl(func) => {
                 self.create_func(func.ident.clone(), func.clone());
                 Ok(GabrValue::new(ObjectInner::NULL.as_object(), false))

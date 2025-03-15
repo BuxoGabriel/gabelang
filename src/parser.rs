@@ -169,6 +169,7 @@ impl<'a> Parser<'a> {
                 Ok(self.parse_statement_after_assignable(assignable)?)
             },
             Token::WHILE => Ok(self.parse_while_loop()?),
+            Token::FOR => Ok(self.parse_for_loop()?),
             Token::IF => Ok(self.parse_if_statement()?),
             Token::RETURN => Ok(self.parse_return_statement()?),
             Token::FN => Ok(self.parse_function()?),
@@ -249,6 +250,26 @@ impl<'a> Parser<'a> {
         let body = self.parse_block()?;
         Ok(ast::Statement::While {
             cond,
+            body
+        })
+    }
+
+    // Precondition: Caller must only call this if the current token is a for token
+    // Syntax is for(statement; condition; statement;) {body}
+    fn parse_for_loop(&mut self) -> ParseResult<ast::Statement> {
+        // Expect that current token is a for token
+        self.expect_token(Token::FOR)?;
+        self.expect_token(Token::LPAREN)?;
+        let init = Box::from(self.parse_statement()?);
+        let cond = self.parse_expression(0)?;
+        self.expect_token(Token::SEMICOLON)?;
+        let update = Box::from(self.parse_statement()?);
+        self.expect_token(Token::RPAREN)?;
+        let body = self.parse_block()?;
+        Ok(ast::Statement::For {
+            init,
+            cond,
+            update,
             body
         })
     }

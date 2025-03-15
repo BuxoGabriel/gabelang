@@ -64,6 +64,8 @@ pub enum Token {
     TRUE,
     /// Maps to false
     FALSE,
+    /// Maps to for
+    FOR,
     /// Maps to any positive integer
     INT(isize),
     /// Maps to any label that starts with an alphabetical character and only contains alphabetical
@@ -109,6 +111,7 @@ impl Display for Token {
             Self::LET => f.write_str("let"),
             Self::FN => f.write_str("fn"),
             Self::WHILE => f.write_str("while"),
+            Self::FOR => f.write_str("for"),
             Self::IF => f.write_str("if"),
             Self::ELSE => f.write_str("else"),
             Self::RETURN => f.write_str("return"),
@@ -404,6 +407,7 @@ impl<'a> Lexer<'a> {
             "while" => Token::WHILE,
             "if" => Token::IF,
             "else" => Token::ELSE,
+            "for" => Token::FOR,
             "True" => Token::TRUE,
             "False" => Token::FALSE,
         _ => Token::IDENTIFIER(String::from(literal))
@@ -492,24 +496,6 @@ mod tests {
     }
 
     #[test]
-    fn parse_keywords() {
-        let input = String::from("let fn while if else return True False");
-        let expected_tokens = Ok(vec![
-            TokenWithLocation::new(Token::LET, Location::default()),
-            TokenWithLocation::new(Token::FN, Location { line: 1, position: 5 }),
-            TokenWithLocation::new(Token::WHILE, Location{ line: 1, position: 8 }),
-            TokenWithLocation::new(Token::IF, Location { line: 1, position: 14 }),
-            TokenWithLocation::new(Token::ELSE, Location{ line: 1, position: 17 }),
-            TokenWithLocation::new(Token::RETURN, Location{ line: 1, position: 22 }),
-            TokenWithLocation::new(Token::TRUE, Location{ line: 1, position: 29 }),
-            TokenWithLocation::new(Token::FALSE, Location{ line: 1, position: 34 }),
-        ]);
-        let mut lexer = Lexer::new(&input);
-        let tokens = lexer.parse();
-        assert_eq!(tokens, expected_tokens)
-    }
-
-    #[test]
     fn parse_strings() {
         let input = String::from("let my_string = \"hello\" + \"world\";");
         let expected_tokens = Ok(vec![
@@ -521,6 +507,67 @@ mod tests {
             TokenWithLocation::new(Token::STRING("world".to_string()), Location { line: 1, position: 27 }),
             TokenWithLocation::new(Token::SEMICOLON, Location { line: 1, position: 34 }),
         ]);
+        let mut lexer = Lexer::new(&input);
+        let tokens = lexer.parse();
+        assert_eq!(tokens, expected_tokens)
+    }
+
+    #[test]
+    fn parse_keywords() {
+        let input = String::from("let fn while if else return for True False");
+        let expected_tokens = Ok(vec![
+            TokenWithLocation::new(Token::LET, Location::default()),
+            TokenWithLocation::new(Token::FN, Location { line: 1, position: 5 }),
+            TokenWithLocation::new(Token::WHILE, Location{ line: 1, position: 8 }),
+            TokenWithLocation::new(Token::IF, Location { line: 1, position: 14 }),
+            TokenWithLocation::new(Token::ELSE, Location{ line: 1, position: 17 }),
+            TokenWithLocation::new(Token::RETURN, Location{ line: 1, position: 22 }),
+            TokenWithLocation::new(Token::FOR, Location{ line: 1, position: 29 }),
+            TokenWithLocation::new(Token::TRUE, Location{ line: 1, position: 33 }),
+            TokenWithLocation::new(Token::FALSE, Location{ line: 1, position: 38 }),
+        ]);
+        let mut lexer = Lexer::new(&input);
+        let tokens = lexer.parse();
+        assert_eq!(tokens, expected_tokens)
+    }
+
+    #[test]
+    fn parse_loops() {
+        let input = String::from("while i == 2 {\n\tfor(let b = 2; b < i; b = b + 1;) {\n\t\ti = i - b;\n\t}\n}");
+        let expected_tokens = Ok(vec ![
+            TokenWithLocation::new(Token::WHILE, Location::default()),
+            TokenWithLocation::new(Token::IDENTIFIER(String::from("i")), Location { line: 1, position: 7 }),
+            TokenWithLocation::new(Token::EQ, Location { line: 1, position: 9 }),
+            TokenWithLocation::new(Token::INT(2), Location { line: 1, position: 12 }),
+            TokenWithLocation::new(Token::LSQUIG, Location { line: 1, position: 14 }),
+            TokenWithLocation::new(Token::FOR, Location { line: 2, position: 2 }),
+            TokenWithLocation::new(Token::LPAREN, Location { line: 2, position: 5 }),
+            TokenWithLocation::new(Token::LET, Location { line: 2, position: 6 }),
+            TokenWithLocation::new(Token::IDENTIFIER(String::from("b")), Location { line: 2, position: 10 }),
+            TokenWithLocation::new(Token::EQUAL, Location { line: 2, position: 12 }),
+            TokenWithLocation::new(Token::INT(2), Location { line: 2, position: 14 }),
+            TokenWithLocation::new(Token::SEMICOLON, Location { line: 2, position: 15 }),
+            TokenWithLocation::new(Token::IDENTIFIER(String::from("b")), Location { line: 2, position: 17 }),
+            TokenWithLocation::new(Token::LT, Location { line: 2, position: 19 }),
+            TokenWithLocation::new(Token::IDENTIFIER(String::from("i")), Location { line: 2, position: 21 }),
+            TokenWithLocation::new(Token::SEMICOLON, Location { line: 2, position: 22 }),
+            TokenWithLocation::new(Token::IDENTIFIER(String::from("b")), Location { line: 2, position: 24 }),
+            TokenWithLocation::new(Token::EQUAL, Location { line: 2, position: 26 }),
+            TokenWithLocation::new(Token::IDENTIFIER(String::from("b")), Location { line: 2, position: 28 }),
+            TokenWithLocation::new(Token::PLUS, Location { line: 2, position: 30 }),
+            TokenWithLocation::new(Token::INT(1), Location { line: 2, position: 32 }),
+            TokenWithLocation::new(Token::SEMICOLON, Location { line: 2, position: 33 }),
+            TokenWithLocation::new(Token::RPAREN, Location { line: 2, position: 34 }),
+            TokenWithLocation::new(Token::LSQUIG, Location { line: 2, position: 36 }),
+            TokenWithLocation::new(Token::IDENTIFIER(String::from("i")), Location { line: 3, position: 3 }),
+            TokenWithLocation::new(Token::EQUAL, Location { line: 3, position: 5 }),
+            TokenWithLocation::new(Token::IDENTIFIER(String::from("i")), Location { line: 3, position: 7 }),
+            TokenWithLocation::new(Token::MINUS, Location { line: 3, position: 9 }),
+            TokenWithLocation::new(Token::IDENTIFIER(String::from("b")), Location { line: 3, position: 11 }),
+            TokenWithLocation::new(Token::SEMICOLON, Location { line: 3, position: 12 }),
+            TokenWithLocation::new(Token::RSQUIG, Location { line: 4, position: 2 }),
+            TokenWithLocation::new(Token::RSQUIG, Location { line: 5, position: 1 }) 
+    ]);
         let mut lexer = Lexer::new(&input);
         let tokens = lexer.parse();
         assert_eq!(tokens, expected_tokens)

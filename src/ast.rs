@@ -22,6 +22,12 @@ pub enum Statement {
         cond: Expression,
         body: Vec<Self>
     },
+    For {
+        init: Box<Self>,
+        cond: Expression,
+        update: Box<Self>,
+        body: Vec<Self>
+    },
     Return(Option<Expression>),
     FuncDecl(Function)
 }
@@ -217,6 +223,7 @@ impl Display for Statement {
                 Ok(())
             },
             Self::While { cond, body } => write!(f, "while {cond} {{{}}}", join(body, " ")),
+            Self::For { init, cond, update, body } => write!(f, "for({init} {cond}; {update}){{{}}}", join(body, " ")),
             Self::FuncDecl(func) => {
                 write!(f, "{func}")
             }
