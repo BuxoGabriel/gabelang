@@ -168,6 +168,7 @@ impl<'a> Parser<'a> {
                 let assignable = self.parse_assignable()?;
                 Ok(self.parse_statement_after_assignable(assignable)?)
             },
+            Token::DO => Ok(self.parse_do_while_loop()?),
             Token::WHILE => Ok(self.parse_while_loop()?),
             Token::FOR => Ok(self.parse_for_loop()?),
             Token::IF => Ok(self.parse_if_statement()?),
@@ -239,6 +240,21 @@ impl<'a> Parser<'a> {
         Ok(ast::Statement::Assign {
             assignable,
             expression
+        })
+    }
+
+    // Syntax do { block } while cond
+    // Precondition: Caller must only call this if the current token is a do token
+    fn parse_do_while_loop(&mut self) -> ParseResult<ast::Statement> {
+        // Expect that current token is do and move on to next token
+        self.expect_token(Token::DO)?;
+        let body = self.parse_block()?;
+        // Expect the keyword while after code block and preceeding condition
+        self.expect_token(Token::WHILE)?;
+        let cond = self.parse_expression(0)?;
+        Ok(ast::Statement::DoWhile {
+            body,
+            cond
         })
     }
 

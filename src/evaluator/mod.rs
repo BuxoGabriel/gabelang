@@ -227,6 +227,17 @@ impl GabrEnv {
                     }
                 }
             },
+            Statement::DoWhile { body, cond } => {
+                let mut result;
+                loop {
+                    result = self.eval_program(body)?;
+                    if result.returning ||
+                    !self.eval_expression(cond)?.inner().is_truthy() {
+                        break
+                    }
+                }
+                Ok(result)
+            },
             Statement::While { cond, body } => {
                 let mut result = GabrValue::new(ObjectInner::NULL.as_object(), false);
                 while self.eval_expression(cond)?.inner().is_truthy() {

@@ -14,6 +14,7 @@ The [Writing an Interpreter in Go](interpreterbook.com) book by Thorsten Ball wa
 <assign_statement> = <assignable> = <expression>;
 <if_statement> = if <expression> <code_block>
 <while_loop> = while <expression> <code_block>
+<for_loop> = for(<statement> <expression>; <statement>) <code_block>
 <func_decl> = fn <identifier> <param_idents> <codeblock>
 <code_block> = {<program>}
 <param_idents> = (<_param_idents>)
@@ -91,7 +92,6 @@ cargo test
 
 ## Todo
 
-- For Loops
 - Do While Loops
 - Better Documentation
 - Built in Functions(print, file, fetch, input)

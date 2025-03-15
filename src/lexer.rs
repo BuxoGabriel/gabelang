@@ -52,8 +52,12 @@ pub enum Token {
     LET,
     /// Maps to fn
     FN,
+    /// Maps to do
+    DO,
     /// Maps to while
     WHILE,
+    /// Maps to for
+    FOR,
     /// Maps to if
     IF,
     /// Maps to else
@@ -64,8 +68,6 @@ pub enum Token {
     TRUE,
     /// Maps to false
     FALSE,
-    /// Maps to for
-    FOR,
     /// Maps to any positive integer
     INT(isize),
     /// Maps to any label that starts with an alphabetical character and only contains alphabetical
@@ -110,6 +112,7 @@ impl Display for Token {
             Self::RSQR => f.write_str("]"),
             Self::LET => f.write_str("let"),
             Self::FN => f.write_str("fn"),
+            Self::DO => f.write_str("do"),
             Self::WHILE => f.write_str("while"),
             Self::FOR => f.write_str("for"),
             Self::IF => f.write_str("if"),
@@ -404,10 +407,11 @@ impl<'a> Lexer<'a> {
             "let" => Token::LET,
             "return" =>Token::RETURN,
             "fn" => Token::FN,
+            "do" => Token::DO,
             "while" => Token::WHILE,
+            "for" => Token::FOR,
             "if" => Token::IF,
             "else" => Token::ELSE,
-            "for" => Token::FOR,
             "True" => Token::TRUE,
             "False" => Token::FALSE,
         _ => Token::IDENTIFIER(String::from(literal))

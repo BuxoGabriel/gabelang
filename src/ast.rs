@@ -18,6 +18,10 @@ pub enum Statement {
         body: Vec<Self>,
         r#else: Option<Vec<Self>>
     },
+    DoWhile {
+        body: Vec<Self>,
+        cond: Expression
+    },
     While {
         cond: Expression,
         body: Vec<Self>
@@ -222,6 +226,7 @@ impl Display for Statement {
                 }
                 Ok(())
             },
+            Self::DoWhile { body, cond } => write!(f, "do {{{}}} while {cond}", join(body, " ")),
             Self::While { cond, body } => write!(f, "while {cond} {{{}}}", join(body, " ")),
             Self::For { init, cond, update, body } => write!(f, "for({init} {cond}; {update}){{{}}}", join(body, " ")),
             Self::FuncDecl(func) => {
