@@ -9,6 +9,7 @@ pub fn load_built_ins() -> HashMap<String, Rc<dyn BuiltIn>> {
     let mut hash_map = HashMap::new();
     hash_map.insert("len".to_string(), Len{}.as_built_in());
     hash_map.insert("reverse".to_string(), Reverse{}.as_built_in());
+    hash_map.insert("abs".to_string(), Abs{}.as_built_in());
     hash_map
 }
 
@@ -69,6 +70,34 @@ impl BuiltIn for Reverse {
             _ => Err("Built-In \"reverse\" expects first arg\"str\" to be of type string or array".to_string())
         }
     }
+
+    fn as_built_in(self) -> Rc<dyn BuiltIn> {
+        Rc::from(self)
+    }
+}
+
+struct Abs{}
+
+impl BuiltIn for Abs {
+    fn get_params(&self) -> Vec<String> {
+        vec![
+            "_num".to_string(),
+        ]
+    }
+
+    fn eval(&self, env: &mut GabrEnv) -> Result<Object, String> {
+        let _num = env.get_var("_num");
+        if _num.is_none() {
+            return Err("Built-In \"abs\" did not recieve arg abs".to_string());
+        }
+        let num = _num.unwrap();
+        let num = &*num.inner();
+        match num {
+            ObjectInner::NUMBER(num) => Ok(ObjectInner::NUMBER(num.abs()).as_object()),
+            _ => Err("Built-In \"abs\" expects first argument to be a number".to_string())
+        }
+    }
+
     fn as_built_in(self) -> Rc<dyn BuiltIn> {
         Rc::from(self)
     }
