@@ -92,7 +92,6 @@ cargo test
 
 ## Todo
 
-- Do While Loops
 - Better Documentation
 - Built in Functions(print, file, fetch, input)
 - Add tests to ast and eval modules
