@@ -65,22 +65,50 @@ ___
 - returns a new reversed array or string without changing the parameter object
 - throws an error if provided with something other than an array or string
 
+___
+
+**abs(number) -> number**
+
+- returns the absolute value of a passed in number
+- throws an error if provided with something other than a number
+
 ## Build
 
 Build with
 ```sh
-cargo build
+cargo build --release
+```
+
+## Build for wasm target
+
+Requires wasm-pack to be installed
+```sh
+cargo install wasm-pack
+```
+
+Build with
+```sh
+wasm-pack build --features wasm
+```
+
+## Install
+
+Requires cargo to be installed
+
+Install gabelang with
+```sh
+cargo install gabelang
 ```
 
 ## Run
 
 Run as repl with
 ```sh
-cargo run
+gabelang
 ```
 or run a script with
 ```sh
-cargo run -- --file [script name]
+gabelang --file [script name]
 ```
 
 ## Test
@@ -102,4 +130,3 @@ cargo test
 - Add tooling/language server
 - Add bytecode compiler
 - Create VM that can run bytecode
-- Compile to/through C, NASM, or MIPS

@@ -18,7 +18,7 @@ pub mod parser;
 /// The evaluator module contains the GabrEnv struct which provides an environment in order to run gabelang code
 pub mod evaluator;
 
-use evaluator::GabrEnv;
+use evaluator::Runtime;
 use parser::Parser;
 
 /// Config for running the gabelang interpretter
@@ -96,8 +96,8 @@ pub fn run(config: Config) -> io::Result<()> {
         match program {
             Ok(program) => {
                 println!("parsing complete! Running {}", &file_name);
-                let mut env = GabrEnv::new();
-                match env.eval_program(&program) {
+                let mut runtime = Runtime::new();
+                match runtime.eval_program_with_new_scope(&program) {
                     Ok(res) => println!("{res}"),
                     Err(err) => println!("Execution Failed: {err}")
                 }
@@ -113,7 +113,7 @@ pub fn run(config: Config) -> io::Result<()> {
 /// Wasm Interpretter Binding for the gabelang language
 #[cfg_attr(feature = "wasm", wasm_bindgen)]
 pub struct Gabelang {
-    env: GabrEnv
+    runtime: Runtime
 }
 
 #[cfg_attr(feature = "wasm", wasm_bindgen)]
@@ -122,14 +122,52 @@ impl Gabelang {
     #[cfg_attr(feature = "wasm", wasm_bindgen(constructor))]
     pub fn new() -> Self {
         Self {
-            env: GabrEnv::new()
+            runtime: Runtime::new()
         }
     }
     
     /// Executes a gabelang program
     #[cfg_attr(feature = "wasm", wasm_bindgen)]
-    pub fn execute(&mut self, program: &str) -> String {
-        let program = Parser::new(program).parse_program().expect("Failed to evaluate program");
-        self.env.eval_program(&program).map(|val| format!("{}", val)).unwrap_or_else(|e| e)
+    pub fn run_program(&mut self, program: &str) -> String {
+        let program = match Parser::new(program).parse_program() {
+            Ok(program) => program,
+            Err(e) => return format!("Error: {e}"),
+        };
+        self.runtime.eval_program_with_new_scope(&program)
+            .map(|val| format!("{}", val))
+            .unwrap_or_else(|e| format!("Error: {e}"))
+    }
+
+    /// Executes a line of gabelang code
+    #[cfg_attr(feature="wasm", wasm_bindgen)]
+    pub fn execute(&mut self, code: &str) -> String {
+        let code = match Parser::new(code).parse_program() {
+            Ok(program) => program,
+            Err(e) => return format!("Error: {e}"),
+        };
+        self.runtime.eval_program_with_new_scope(&code)
+            .map(|val| format!("{}", val))
+            .unwrap_or_else(|e| format!("Error: {e}"))
+    }
+
+    /// Resets the GabrEnvironment including all variable scopes
+    #[cfg_attr(feature="wasm", wasm_bindgen)]
+    pub fn reset_scope(&mut self) {
+        self.runtime = Runtime::new();
+    }
+
+    /// Pushes a new stack frame on to the stack
+    #[cfg_attr(feature="wasm", wasm_bindgen)]
+    pub fn push_frame(&mut self) {
+        self.runtime.push_scope();
+    }
+
+    /// Pops a stack frame off of the stack
+    #[cfg_attr(feature="wasm", wasm_bindgen)]
+    pub fn pop_frame(&mut self) -> bool {
+        match self.runtime.pop_scope() {
+            Ok(_) => true,
+            Err(_) => false
+        }
     }
 }

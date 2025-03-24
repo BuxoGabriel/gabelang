@@ -1,7 +1,7 @@
 use std::rc::Rc;
 use std::collections::HashMap;
 
-use crate::evaluator::{GabrEnv, Object};
+use crate::evaluator::{Runtime, Object};
 
 use super::ObjectInner;
 
@@ -15,7 +15,7 @@ pub fn load_built_ins() -> HashMap<String, Rc<dyn BuiltIn>> {
 
 pub trait BuiltIn {
     fn get_params(&self) -> Vec<String>;
-    fn eval(&self, env: &mut GabrEnv) -> Result<Object, String>;
+    fn eval(&self, rt: &mut Runtime) -> Result<Object, String>;
     fn as_built_in(self) -> Rc<dyn BuiltIn>;
 }
 
@@ -28,8 +28,8 @@ impl BuiltIn for Len {
         ]
     }
 
-    fn eval(&self, env: &mut GabrEnv) -> Result<Object, String> {
-        let obj = env.get_var("_obj");
+    fn eval(&self, rt: &mut Runtime) -> Result<Object, String> {
+        let obj = rt.get_var("_obj");
         if obj.is_none() {
             return Err("Built-In \"len\" did not recieve expected arg \"_arr\"".to_string())
         };
@@ -57,8 +57,8 @@ impl BuiltIn for Reverse {
             "_obj".to_string(),
         ]
     }
-    fn eval(&self, env: &mut GabrEnv) -> Result<Object, String> {
-        let obj = env.get_var("_obj");
+    fn eval(&self, rt: &mut Runtime) -> Result<Object, String> {
+        let obj = rt.get_var("_obj");
         if obj.is_none() {
             return Err("Built-In \"reverse\" did not recieve expected arg \"_obj\"".to_string())
         }
@@ -85,8 +85,8 @@ impl BuiltIn for Abs {
         ]
     }
 
-    fn eval(&self, env: &mut GabrEnv) -> Result<Object, String> {
-        let _num = env.get_var("_num");
+    fn eval(&self, rt: &mut Runtime) -> Result<Object, String> {
+        let _num = rt.get_var("_num");
         if _num.is_none() {
             return Err("Built-In \"abs\" did not recieve arg abs".to_string());
         }

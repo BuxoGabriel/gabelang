@@ -116,9 +116,9 @@ impl Display for Token {
             Self::IF => f.write_str("if"),
             Self::ELSE => f.write_str("else"),
             Self::RETURN => f.write_str("return"),
-            Self::BOOL(bool) => f.write_str("{bool}"),
-            Self::INT(val) => write!(f, "Int({})", val),
-            Self::IDENTIFIER(string) => write!(f, "IDENTIFIER({})", string),
+            Self::BOOL(bool) => write!(f, "{bool}"),
+            Self::INT(val) => write!(f, "Int({val})"),
+            Self::IDENTIFIER(string) => write!(f, "IDENTIFIER({string})"),
         }
     }
 }

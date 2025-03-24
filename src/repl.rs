@@ -1,5 +1,5 @@
 use std::io::{self, BufRead, Write};
-use crate::evaluator::GabrEnv;
+use crate::evaluator::Runtime;
 use crate::parser::Parser;
 
 /// Starts the gabelang repl in an isolated environment
@@ -31,7 +31,7 @@ TYPING AN EXPRESSION INSTEAD OF A STATEMENT WILL PRINT THE EVALUATION OF THE STA
     print!(">> ");
     io::stdout().flush().unwrap();
     let stdin = io::stdin();
-    let mut env = GabrEnv::new();
+    let mut env = Runtime::new();
     for line in stdin.lock().lines() {
         let program_ast = Parser::new(&line.unwrap()).parse_program();
         let program = match program_ast {
@@ -41,16 +41,14 @@ TYPING AN EXPRESSION INSTEAD OF A STATEMENT WILL PRINT THE EVALUATION OF THE STA
                 continue;
             }
         };
-        if program.len() == 1 {
-            match env.eval_statement(&program[0]) {
-                Ok(object) => {
-                    if object.is_some() {
-                        println!("{object}");
-                    }
-                },
-                Err(err) => println!("{err}")
-            };
-        }
+        match env.eval_program(&program) {
+            Ok(object) => {
+                if object.is_some() {
+                    println!("{object}");
+                }
+            },
+            Err(err) => println!("{err}")
+        };
         print!(">> ");
         io::stdout().flush().unwrap();
     }
