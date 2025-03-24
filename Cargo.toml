@@ -10,3 +10,10 @@ repository = "https://github.com/buxogabriel/gabelang"
 categories = ["compilers"]
 
 [dependencies]
+wasm-bindgen = { version = "0.2", optional = true }
+
+[features]
+wasm = ["dep:wasm-bindgen"]
+
+[lib]
+crate-type = ["cdylib", "rlib"]

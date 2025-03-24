@@ -2,6 +2,9 @@
 #![doc(html_favicon_url = "https://buxogabriel.vercel.app/favicon.ico")]
 #![doc(html_logo_url = "https://buxogabriel.vercel.app/apple-touch-icon.png")]
 
+#[cfg(feature="wasm")]
+use wasm_bindgen::prelude::*;
+
 use std::{collections::HashMap, fs, io};
 
 mod ast;
@@ -105,4 +108,28 @@ pub fn run(config: Config) -> io::Result<()> {
     }
     repl::start();
     Ok(())
+}
+
+/// Wasm Interpretter Binding for the gabelang language
+#[cfg_attr(feature = "wasm", wasm_bindgen)]
+pub struct Gabelang {
+    env: GabrEnv
+}
+
+#[cfg_attr(feature = "wasm", wasm_bindgen)]
+impl Gabelang {
+    /// Creates a new interpretter
+    #[cfg_attr(feature = "wasm", wasm_bindgen(constructor))]
+    pub fn new() -> Self {
+        Self {
+            env: GabrEnv::new()
+        }
+    }
+    
+    /// Executes a gabelang program
+    #[cfg_attr(feature = "wasm", wasm_bindgen)]
+    pub fn execute(&mut self, program: &str) -> String {
+        let program = Parser::new(program).parse_program().expect("Failed to evaluate program");
+        self.env.eval_program(&program).map(|val| format!("{}", val)).unwrap_or_else(|e| e)
+    }
 }

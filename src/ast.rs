@@ -178,7 +178,7 @@ impl Display for Literal {
                 }).collect::<Vec<String>>().join(", ");
                 write!(f, "{{{obj}}}")
             },
-            Self::Bool(bool) => f.write_str("{bool}"),
+            Self::Bool(bool) => write!(f, "{}", bool),
         }
     }
 }
