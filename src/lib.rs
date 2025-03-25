@@ -125,6 +125,12 @@ impl Gabelang {
             runtime: Runtime::new()
         }
     }
+
+    /// Returns the repl greeting text
+    #[cfg_attr(feature = "wasm", wasm_bindgen)]
+    pub fn repl_greeting() -> String {
+        repl::REPLGREETING.to_string()
+    }
     
     /// Executes a gabelang program
     #[cfg_attr(feature = "wasm", wasm_bindgen)]
