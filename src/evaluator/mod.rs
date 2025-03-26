@@ -1,9 +1,11 @@
 use std::fmt::{ Display, Write };
+use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 use std::cell::{RefCell, RefMut};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 mod built_ins;
+mod scope;
 
 use crate::ast::{self, join, Assignable, Expression, InfixOp, Literal, PrefixOp, Statement};
 
@@ -64,132 +66,21 @@ impl Runtime {
         Ok(result)
     }
 
-    fn create_func(&mut self, name: String, val: ast::Function) {
+    fn create_func(&mut self, name: String, ast: ast::Function) {
+        let mut refs = HashMap::new();
+        for scope in &self.var_scopes {
+            scope.iter().map(|(k, v)|(k.clone(), v.clone())).for_each(|(k, v) | {refs.insert(k, v);});
+        }
+        let func = FunctionInner {
+            ast,
+            refs
+        };
         let scope = self.var_scopes.last_mut().expect("Tried to create function but no scopes are available in environment");
-        scope.insert(name, ObjectInner::FUNCTION(val).as_object());
+        scope.insert(name, ObjectInner::FUNCTION(func).as_object());
     }
 
     fn get_built_in(&self, name: String) -> Option<Rc<dyn built_ins::BuiltIn>> {
         self.built_ins.get(&name).map(|bi| bi.clone())
-    }
-
-    fn create_var(&mut self, name: String, val: Object) {
-        let scope = self.var_scopes.last_mut().expect("Tried to create variable but no scopes are available in environment");
-        scope.insert(name, val);
-    }
-
-    fn get_var(&self, name: &str) -> Option<Object> {
-        for scope in self.var_scopes.iter().rev() {
-            if let Some(val) = scope.get(name) {
-                return Some(val.clone());
-            }
-        }
-        None
-    }
-
-    fn get_assignable(&mut self, assignable: &Assignable) -> Result<Object, String> {
-        match assignable {
-            Assignable::Var(var) => self.get_var(&var).ok_or("Could not find variable in any scope".to_string()),
-            Assignable::PropIndex { obj, index } => {
-                let index = self.eval_expression(index)?;
-                let obj = self.get_assignable(obj)?;
-                let index: &ObjectInner = &index.inner();
-                match index {
-                    ObjectInner::NUMBER(num) => {
-                        let arr = obj.inner().clone();
-                        if let ObjectInner::ARRAY(arr) = arr {
-                            Ok(arr[*num as usize].clone())
-                        } else {
-                            Err("Can not index into non-array with a number".to_string())
-                        }
-                    },
-                    ObjectInner::STRING(prop) => {
-                        // If indexing an object by string expect to 
-                        let obj = obj.inner().clone();
-                        if let ObjectInner::OBJECT(obj) = obj {
-                            Ok(obj.get(prop).map(|obj| obj.clone()).unwrap_or(ObjectInner::NULL.as_object()))
-                        } else {
-                            Err("Can not index into non-object with a string".to_string())
-                        }
-                    }
-                    _ => Err("can not index by non-number and non string value".to_string())
-                }
-            },
-            Assignable::ObjectProp { obj, prop } => {
-                let obj = self.get_assignable(obj)?;
-                let obj: &ObjectInner = &obj.inner();
-                if let ObjectInner::OBJECT(obj) = obj {
-                    Ok(obj.get(prop).map(|obj| obj.clone()).ok_or("Property does not exist on this object".to_string())?)
-                } else {
-                    Err("Can not get property of non-object value".to_string())
-                }
-            }
-        }
-    }
-
-    fn set_var(&mut self, name: &str, val: Object) -> Result<(),String> {
-        for scope in self.var_scopes.iter_mut().rev() {
-            if scope.contains_key(name) {
-                scope.insert(name.to_string(), val);
-                return Ok(())
-            }
-        }
-        Err("Environment does not contain variable to be altered".to_string())
-    }
-
-    fn set_assignable(&mut self, assignable: &Assignable, val: Object) -> Result<(), String> {
-        match assignable {
-            Assignable::Var(var) => {
-                self.set_var(&var, val)
-            },
-            Assignable::PropIndex { obj, index } => {
-                let index = self.eval_expression(index)?;
-                let index: &ObjectInner = &index.inner();
-                match index {
-                    ObjectInner::NUMBER(num) => {
-                        let num = *num;
-                        let arr = self.get_assignable(obj)?;
-                        let arr_mut: &mut ObjectInner = &mut arr.inner();
-                        if let ObjectInner::ARRAY(arr) = arr_mut {
-                            if num < 0 {
-                                Err("Can not index array with negative index".to_string())
-                            } else if (num as usize) < arr.len() {
-                                arr[num as usize] = val;
-                                Ok(())
-                            } else if (num as usize) == arr.len() {
-                                arr.push(val);
-                                Ok(())
-                            } else {
-                                Err("Can not set array at an index greater than its length".to_string())
-                            }
-                        } else {
-                            Err("Can not index non-array value by a number".to_string())
-                        }
-                    },
-                    ObjectInner::STRING(prop) => {
-                        let obj = self.get_assignable(obj)?;
-                        let obj_mut: &mut ObjectInner = &mut obj.inner();
-                        if let ObjectInner::OBJECT(obj) = obj_mut {
-                            obj.insert(prop.clone(), val);
-                            Ok(())
-                        } else {
-                            Err("Can not index non-array value by a number".to_string())
-                        }
-                    }
-                    _ => return Err("Can not index string with non number value".to_string())
-                }
-            },
-            Assignable::ObjectProp { obj, prop } => {
-                let obj = self.get_assignable(obj)?;
-                let obj_mut: &mut ObjectInner = &mut obj.inner();
-                if let ObjectInner::OBJECT(obj) = obj_mut {
-                    obj.insert(prop.clone(), val);
-                    Ok(())
-                } else {
-                    Err("Can not get property of non-object value".to_string())
-                }
-            }
-        }
     }
 
     /// Pushes a new stack frame/variable scope on to the stack
@@ -448,7 +339,7 @@ impl Runtime {
             self.push_scope();
             self.load_params(params)?;
             // Evaluate the body of the function with the new context
-            let result = self.eval_program(&func.body)?;
+            let result = self.eval_program(&func.ast.body, Some(&func.refs))?;
             // Remove param variables scope
             self.pop_scope()?;
             // Function call should not automatically be interpretted as return funcCall(param);
@@ -518,15 +409,42 @@ impl Object {
     }
 }
 
+impl PartialEq for Object {
+    /// Two objects are equal if they point to the same place in memory
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl Eq for Object {}
+
+impl Hash for Object {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        let pointer = Rc::as_ptr(&self.0) as usize;
+        pointer.hash(state);
+    }
+}
+
 impl Display for Object {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        if Rc::weak_count(&self.0) == 0 {
-            let weak = Rc::downgrade(&self.0);
-            let res = write!(f, "{}", self.inner());
-            drop(weak);
-            return res;
+        // Creates a static internally mutable map variable on a per thread basis.
+        // This variable will stick around between function calls because it is static
+        thread_local! {
+            static PRINTING: RefCell<HashSet<usize>> = RefCell::new(HashSet::new())
         }
-        return f.write_str("Cycle");
+        // cast Rc to a pointer to the underlying object
+        let ptr = Rc::as_ptr(&self.0) as usize;
+        // If we have seen this object before print "Cycle"
+        if PRINTING.with(|printing| printing.borrow().contains(&ptr)) {
+            return f.write_str("Cycle");
+        }
+        // Else indicate that we have seen this object,
+        // Print it,
+        // And then remove it from the hashset so it doesnt interupt future prints
+        PRINTING.with(|printing| printing.borrow_mut().insert(ptr));
+        let res = write!(f, "{}", self.0.borrow());
+        PRINTING.with(|printing| printing.borrow_mut().remove(&ptr));
+        res
     }
 }
 
@@ -535,7 +453,7 @@ enum ObjectInner {
     NUMBER(i64),
     STRING(String),
     ARRAY(Vec<Object>),
-    FUNCTION(ast::Function),
+    FUNCTION(FunctionInner),
     OBJECT(HashMap<String, Object>),
     BOOL(bool),
     NULL
@@ -572,11 +490,21 @@ impl Display for ObjectInner {
                 }).collect::<Vec<String>>();
                 write!(f, "{{\n{}\n}}", join(&properties, "\n"))
             },
-            Self::FUNCTION(func) => {
-                write!(f, "(Function: {})", func)
-            },
+            Self::FUNCTION(func) => write!(f, "{func}"),
             Self::BOOL(bool) => write!(f, "{}", bool),
             Self::NULL => f.write_str("null")
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct FunctionInner {
+    ast: ast::Function,
+    refs: HashMap<String, Object>
+}
+
+impl Display for FunctionInner {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "(Function: {})", self.ast)
     }
 }
