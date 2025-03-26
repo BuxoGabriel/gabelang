@@ -1,8 +1,9 @@
 name: Publish
 
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - 'v*'
 
 env:
   CARGO_TERM_COLOR: always
@@ -33,6 +34,7 @@ jobs:
       uses: actions/setup-node@v3
       with:
         node-version: 20
+        registry-url: 'https://registry.npmjs.org'
 
     - name: Build and package wasm
       run: wasm-pack build --release --features wasm
