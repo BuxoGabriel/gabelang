@@ -14,10 +14,8 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        components: wasm-bindgen
+    - name: Install wasm-pack
+      run: cargo install wasm-pack
     
     - name: Build
       run: cargo build --verbose
