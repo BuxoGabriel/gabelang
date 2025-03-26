@@ -392,7 +392,7 @@ impl<'a> Parser<'a> {
             // Also if it reaches an unexpected token then expression should be complete. This is
             // done bc we can assert that precidence will always be >= 0 and so an unexpected -1
             // will always break out of the loop
-            if op_prec <= precidence {
+            if op_prec < precidence {
                 break
             }
             left_side = self.parse_infix(left_side)?;
