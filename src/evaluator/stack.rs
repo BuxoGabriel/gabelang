@@ -1,9 +1,11 @@
 use std::{collections::HashMap, error::Error, fmt::Display};
 
-use super::Object;
+use crate::ast;
+
+use super::{FunctionInner, Object, ObjectInner};
 
 #[derive(Debug)]
-enum StackError {
+pub enum StackError {
     PopEmptyFrame,
     VariableNotInScope,
     NoStack,
@@ -36,6 +38,11 @@ impl  Stack {
 
     fn get_mut(&mut self) -> &mut StackInner  {
         &mut self.0
+    }
+
+    /// Creates a new stack object
+    pub fn new() -> Self {
+        Self(vec![HashMap::new()])
     }
 
     /// Pushes a new stack frame on to the stack
@@ -86,4 +93,20 @@ impl  Stack {
         }
         Err(StackError::VariableNotInScope)
     }
+
+    /// Creates a new function and adds it to the topmost stack frame
+    pub fn create_func(&mut self, name: String, ast: ast::Function) -> StackResult<()> {
+        let mut refs = HashMap::new();
+        for scope in self.get() {
+            scope.iter().map(|(k, v)|(k.clone(), v.clone())).for_each(|(k, v) | {refs.insert(k, v);});
+        }
+        let func = FunctionInner {
+            ast,
+            refs
+        };
+        let scope = self.get_mut().last_mut().ok_or(StackError::NoStack)?;
+        scope.insert(name, ObjectInner::FUNCTION(func).as_object());
+        Ok(())
+    }
+
 }
