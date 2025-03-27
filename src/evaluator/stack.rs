@@ -71,14 +71,14 @@ impl  Stack {
     }
 
     /// Gets a variable from the the topmost stack frame that it can find it.
-    /// If the variable can not be found on any stack frame, returns [None]
-    pub fn get_var(&self, name: &str) -> Option<Object> {
+    /// If the variable can not be found on any stack frame, returns [Err<StackError>]
+    pub fn get_var(&self, name: &str) -> StackResult<Object> {
         for scope in self.get().iter().rev() {
             if let Some(val) = scope.get(name) {
-                return Some(val.clone());
+                return Ok(val.clone());
             }
         }
-        None
+        Err(StackError::VariableNotInScope)
     }
 
     /// Searches for a variable on the topmost frame that it can find it.

@@ -1,3 +1,4 @@
+use std::error::Error;
 use std::fmt::{ Display, Write };
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
@@ -5,14 +6,18 @@ use std::cell::{RefCell, RefMut};
 use std::collections::{HashMap, HashSet};
 
 mod built_ins;
-mod stack;
+pub mod stack;
 
 use stack::{Stack, StackError};
 use crate::ast::{self, join, Assignable, Expression, InfixOp, Literal, PrefixOp, Statement};
 
 #[derive(Debug)]
 enum RuntimeError {
-    StackError(StackError)
+    StackError(StackError),
+    InvalidArrayIndex,
+    InvalidObjectIndex,
+    InvalidIndexTarget,
+    InvalidPropTarget
 }
 
 impl From<StackError> for RuntimeError {
@@ -20,6 +25,14 @@ impl From<StackError> for RuntimeError {
         Self::StackError(err)
     }
 }
+
+impl Display for RuntimeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        todo!()
+    }
+}
+
+impl Error for RuntimeError {}
 
 type RuntimeResult<T> = Result<T, RuntimeError>;
 
@@ -69,7 +82,7 @@ impl Runtime {
     /// To run a program in a new stack frame look for [Self::eval_program_with_new_scope]
     ///
     /// To run a single statement look for [Self::eval_statement]
-    pub fn eval_program(&mut self, program: &Vec<ast::Statement>) -> Result<GabrValue, String> {
+    pub fn eval_program(&mut self, program: &Vec<ast::Statement>) -> RuntimeResult<GabrValue> {
         let mut result = GabrValue::new(ObjectInner::NULL.as_object(), false); 
         for statement in program.iter() {
             result = self.eval_statement(statement)?;
@@ -90,39 +103,43 @@ impl Runtime {
 
     fn get_assignable(&mut self, assignable: &Assignable) -> RuntimeResult<Object> {
         match assignable {
-            Assignable::Var(var) => self.global_stack.get_var(&var).ok_or("Could not find variable in any scope".to_string()),
+            Assignable::Var(var) => Ok(self.global_stack.get_var(&var)?),
             Assignable::PropIndex { obj, index } => {
                 let index = self.eval_expression(index)?;
-                let obj = self.get_assignable(obj)?;
                 let index: &ObjectInner = &index.inner();
-                match index {
-                    ObjectInner::NUMBER(num) => {
-                        let arr = obj.inner().clone();
-                        if let ObjectInner::ARRAY(arr) = arr {
-                            Ok(arr[*num as usize].clone())
+                match &mut self.get_assignable(obj)?.inner() as &mut ObjectInner {
+                    ObjectInner::ARRAY(arr) => {
+                        if let ObjectInner::NUMBER(num) = index {
+                            let num = *num as usize;
+                            if num < 0 {
+                                Err(RuntimeError::InvalidArrayIndex)
+                            } else if (num) < arr.len() {
+                                Ok(arr[num].clone())
+                            } else {
+                                Err(RuntimeError::InvalidArrayIndex)
+                            }
                         } else {
-                            Err("Can not index into non-array with a number".to_string())
+                            Err(RuntimeError::InvalidArrayIndex)
                         }
                     },
-                    ObjectInner::STRING(prop) => {
-                        // If indexing an object by string expect to 
-                        let obj = obj.inner().clone();
-                        if let ObjectInner::OBJECT(obj) = obj {
+                    ObjectInner::OBJECT(obj) => {
+                        if let ObjectInner::STRING(prop) = index {
                             Ok(obj.get(prop).map(|obj| obj.clone()).unwrap_or(ObjectInner::NULL.as_object()))
                         } else {
-                            Err("Can not index into non-object with a string".to_string())
+                            Err(RuntimeError::InvalidObjectIndex)
                         }
-                    }
-                    _ => Err("can not index by non-number and non string value".to_string())
+                    },
+                    _ => Err(RuntimeError::InvalidIndexTarget)
                 }
             },
             Assignable::ObjectProp { obj, prop } => {
                 let obj = self.get_assignable(obj)?;
                 let obj: &ObjectInner = &obj.inner();
                 if let ObjectInner::OBJECT(obj) = obj {
-                    Ok(obj.get(prop).map(|obj| obj.clone()).ok_or("Property does not exist on this object".to_string())?)
+                    // Undefined object properties are retrieved as NULL
+                    Ok(obj.get(prop).map(|obj| obj.clone()).unwrap_or(ObjectInner::NULL.as_object()))
                 } else {
-                    Err("Can not get property of non-object value".to_string())
+                    Err(RuntimeError::InvalidPropTarget)
                 }
             }
         }
@@ -131,45 +148,41 @@ impl Runtime {
     fn set_assignable(&mut self, assignable: &Assignable, val: Object) -> RuntimeResult<()> {
         match assignable {
             Assignable::Var(var) => {
-                self.global_stack.set_var(&var, val)?;
+                Ok(self.global_stack.set_var(&var, val)?)
             },
             Assignable::PropIndex { obj, index } => {
                 let index = self.eval_expression(index)?;
                 let index: &ObjectInner = &index.inner();
-                match index {
-                    ObjectInner::NUMBER(num) => {
-                        let num = *num;
-                        let arr = self.get_assignable(obj)?;
-                        let arr_mut: &mut ObjectInner = &mut arr.inner();
-                        if let ObjectInner::ARRAY(arr) = arr_mut {
+                match &mut self.get_assignable(obj)?.inner() as &mut ObjectInner {
+                    ObjectInner::ARRAY(arr) => {
+                        if let ObjectInner::NUMBER(num) = index {
+                            let num = *num as usize;
                             if num < 0 {
-                                Err("Can not index array with negative index".to_string())
+                                Err(RuntimeError::InvalidArrayIndex)
                             } else if (num as usize) < arr.len() {
-                                arr[num as usize] = val;
+                                arr[num] = val;
                                 Ok(())
-                            } else if (num as usize) == arr.len() {
+                            } else if (num) == arr.len() {
                                 arr.push(val);
                                 Ok(())
                             } else {
-                                Err("Can not set array at an index greater than its length".to_string())
+                                Err(RuntimeError::InvalidArrayIndex)
                             }
                         } else {
-                            Err("Can not index non-array value by a number".to_string())
+                            Err(RuntimeError::InvalidArrayIndex)
                         }
                     },
-                    ObjectInner::STRING(prop) => {
-                        let obj = self.get_assignable(obj)?;
-                        let obj_mut: &mut ObjectInner = &mut obj.inner();
-                        if let ObjectInner::OBJECT(obj) = obj_mut {
+                    ObjectInner::OBJECT(obj) => {
+                        if let ObjectInner::STRING(prop) = index {
                             obj.insert(prop.clone(), val);
                             Ok(())
                         } else {
-                            Err("Can not index non-array value by a number".to_string())
+                            Err(RuntimeError::InvalidObjectIndex)
                         }
-                    }
-                    _ => return Err("Can not index string with non number value".to_string())
+                    },
+                    _ => Err(RuntimeError::InvalidIndexTarget)
                 }
-            },
+            }
             Assignable::ObjectProp { obj, prop } => {
                 let obj = self.get_assignable(obj)?;
                 let obj_mut: &mut ObjectInner = &mut obj.inner();
@@ -177,7 +190,7 @@ impl Runtime {
                     obj.insert(prop.clone(), val);
                     Ok(())
                 } else {
-                    Err("Can not get property of non-object value".to_string())
+                    Err(RuntimeError::InvalidPropTarget)
                 }
             }
         }
@@ -298,10 +311,10 @@ impl Runtime {
                     },
                     Literal::ObjectLit(obj) => {
                         // Create an object
-                        let fields: Vec<(String, Result<Object, String>)> = obj.iter().map(|(ident, expression)| (ident.clone(), self.eval_expression(expression))).collect();
+                        let fields: Vec<(String, RuntimeResult<Object>)> = obj.iter().map(|(ident, expression)| (ident.clone(), self.eval_expression(expression))).collect();
                         // Check for error in evaluated fields
                         let mut err = Ok(());
-                        fields.iter().for_each(|(_, v)| {
+                        fields.into_iter().for_each(|(_, v)| {
                             if let Err(e) = v {
                                 *&mut err = Err(e);
                             }
