@@ -50,6 +50,10 @@ fn double_num(num) {
 }
 ```
 
+## Variable Behavior
+
+- When a variable is used as an expression/rvalue it is deep cloned
+
 ## Built in Functions
 
 **len(obj) -> number**

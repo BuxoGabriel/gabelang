@@ -1,6 +1,6 @@
 [package]
 name = "gabelang"
-version = "2.1.2"
+version = "3.0.0"
 edition = "2021"
 license = "MIT"
 authors = ["Gabriel Buxo"]
