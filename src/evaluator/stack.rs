@@ -1,4 +1,4 @@
-use std::{collections::HashMap, error::Error, fmt::Display, rc::Rc};
+use std::{collections::HashMap, error::Error, fmt::Display};
 
 use crate::ast;
 
