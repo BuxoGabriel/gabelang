@@ -159,8 +159,8 @@ impl Gabelang {
 
     /// Resets the GabrEnvironment including all variable scopes
     #[cfg_attr(feature="wasm", wasm_bindgen)]
-    pub fn reset_scope(&mut self) {
-        self.runtime = Runtime::new();
+    pub fn reset_stack(&mut self) {
+        self.runtime.reset_stack();
     }
 
     /// Pushes a new stack frame on to the stack
