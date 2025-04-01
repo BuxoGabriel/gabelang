@@ -16,10 +16,10 @@ GABELANG IS A HIGH LEVEL, INTERPRETTED, GARBAGE COLLECTED, PROGRAMMING LANGUAGE 
 ARRAYS,OBJECTS, AND FIRST CLASS AND HIGHER ORDER FUNCTIONS
 
 TRY DECLARING VARIABLES LIKE THIS
->> let i = {{ a: [5], b: 3 * 3 }};
+>> let i = { a: [5], b: 3 * 3 };
 
 TRY DECLARING FUNCTIONS LIKE THIS
->> fn double_and_abs(num) {{if num > 0 {{return num * 2;}} else {{return num * -2;}}}}
+>> fn double_and_abs(num) {if num > 0 {return num * 2;} else {return num * -2;}}
 
 TYPING AN EXPRESSION INSTEAD OF A STATEMENT WILL PRINT THE EVALUATION OF THE STATEMENT
 >> double_and_abs(i.b)
@@ -45,7 +45,7 @@ pub fn start() {
                 continue;
             }
         };
-        match env.eval_program(&program) {
+        match env.run_program(&program) {
             Ok(object) => {
                 if object.is_some() {
                     println!("{object}");

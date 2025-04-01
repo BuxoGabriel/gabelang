@@ -97,7 +97,7 @@ pub fn run(config: Config) -> io::Result<()> {
             Ok(program) => {
                 println!("parsing complete! Running {}", &file_name);
                 let mut runtime = Runtime::new();
-                match runtime.eval_program_with_new_scope(&program) {
+                match runtime.run_program(&program) {
                     Ok(res) => println!("{res}"),
                     Err(err) => println!("Execution Failed: {err}")
                 }
@@ -113,7 +113,7 @@ pub fn run(config: Config) -> io::Result<()> {
 /// Wasm Interpretter Binding for the gabelang language
 #[cfg_attr(feature = "wasm", wasm_bindgen)]
 pub struct Gabelang {
-    runtime: Runtime
+    runtime: Runtime,
 }
 
 #[cfg_attr(feature = "wasm", wasm_bindgen)]
@@ -139,7 +139,8 @@ impl Gabelang {
             Ok(program) => program,
             Err(e) => return format!("Error: {e}"),
         };
-        self.runtime.eval_program_with_new_scope(&program)
+        self.runtime.reset_stack();
+        self.runtime.run_program(&program)
             .map(|val| format!("{}", val))
             .unwrap_or_else(|e| format!("Error: {e}"))
     }
@@ -151,7 +152,7 @@ impl Gabelang {
             Ok(program) => program,
             Err(e) => return format!("Error: {e}"),
         };
-        self.runtime.eval_program_with_new_scope(&code)
+        self.runtime.run_program(&code)
             .map(|val| format!("{}", val))
             .unwrap_or_else(|e| format!("Error: {e}"))
     }
@@ -165,13 +166,13 @@ impl Gabelang {
     /// Pushes a new stack frame on to the stack
     #[cfg_attr(feature="wasm", wasm_bindgen)]
     pub fn push_frame(&mut self) {
-        self.runtime.push_scope();
+        self.runtime.global_stack.push_scope();
     }
 
     /// Pops a stack frame off of the stack
     #[cfg_attr(feature="wasm", wasm_bindgen)]
     pub fn pop_frame(&mut self) -> bool {
-        match self.runtime.pop_scope() {
+        match self.runtime.global_stack.pop_scope() {
             Ok(_) => true,
             Err(_) => false
         }

@@ -1,13 +1,21 @@
-use std::{collections::HashMap, error::Error, fmt::Display};
+use std::{collections::HashMap, error::Error, fmt::Display, rc::Rc};
 
 use crate::ast;
 
 use super::{FunctionInner, Object, ObjectInner};
 
+/// A stack error is produced when an attempt to manipulate the stack is invalid or when trying to
+/// access a variable that is not on the stack
 #[derive(Debug)]
 pub enum StackError {
+    /// A Pop Empty Frame error is generated when trying to pop a stack frame from a stack with no
+    /// frames
     PopEmptyFrame,
+    /// A Variable Not In Scope error is generated when trying to manipulate or get the value of a
+    /// variable that does not exist in the stack
     VariableNotInScope,
+    /// A No Stack Error is generated when trying to get or use a variable from the stack but no
+    /// stack frames exist
     NoStack,
 }
 
@@ -28,7 +36,7 @@ type StackResult<T> = Result<T, StackError>;
 type StackInner = Vec<HashMap<String, Object>>;
 
 /// The Runtime Stack object
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct Stack(StackInner);
 
 impl  Stack {
@@ -86,8 +94,8 @@ impl  Stack {
     /// If the variable is not found it returns an [Err<StackError>]
     pub fn set_var(&mut self, name: &str, val: Object) -> StackResult<()> {
         for scope in self.get_mut().iter_mut().rev() {
-            if scope.contains_key(name) {
-                scope.insert(name.to_string(), val);
+            if let Some(obj) = scope.get_mut(name) {
+                *obj.inner() = val.inner().clone();
                 return Ok(())
             }
         }
@@ -96,17 +104,22 @@ impl  Stack {
 
     /// Creates a new function and adds it to the topmost stack frame
     pub fn create_func(&mut self, name: String, ast: ast::Function) -> StackResult<()> {
-        let mut refs = HashMap::new();
-        for scope in self.get() {
-            scope.iter().map(|(k, v)|(k.clone(), v.clone())).for_each(|(k, v) | {refs.insert(k, v);});
-        }
         let func = FunctionInner {
             ast,
-            refs
+            context: self.flat_copy()
         };
         let scope = self.get_mut().last_mut().ok_or(StackError::NoStack)?;
         scope.insert(name, ObjectInner::FUNCTION(func).as_object());
         Ok(())
     }
 
+    /// Creates a copy of the visible stack
+    pub fn flat_copy(&self) -> Self {
+        let mut stack = HashMap::new();
+        self.get().iter()
+            .for_each(|map| map.iter().for_each(|(k, v)| {
+                stack.insert(k.clone(), v.clone());
+            }));
+        Self(vec![stack])
+    }
 }

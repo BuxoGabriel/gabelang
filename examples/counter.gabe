@@ -1,0 +1,14 @@
+fn Counter() {
+    let count = 0;
+    fn increment() {
+        count = count + 1;
+        return count;
+    }
+    return increment;
+}
+
+let counter = Counter();
+
+while(counter() < 10) {}
+
+counter()
