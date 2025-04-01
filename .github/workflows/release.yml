@@ -1,22 +1,43 @@
-name: Rust
+name: Publish
 
 on:
   push:
-    branches: [ "release" ]
-  pull_request:
-    branches: [ "release" ]
+    tags:
+      - 'v*'
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
-
+  release:
     runs-on: ubuntu-latest
-
     steps:
     - uses: actions/checkout@v4
+
+    - name: Install wasm-pack
+      run: cargo install wasm-pack
+    
     - name: Build
       run: cargo build --verbose
+
     - name: Run tests
       run: cargo test --verbose
+
+    - name: Publish to crate.io
+      run: |
+        cargo login ${{ secrets.CRATES_IO_API_TOKEN }}
+        cargo publish
+
+    - name: Install nodejs
+      uses: actions/setup-node@v3
+      with:
+        node-version: 20
+        registry-url: 'https://registry.npmjs.org'
+
+    - name: Build and package wasm
+      run: wasm-pack build --release --features wasm
+    
+    - name: Publish to npm
+      run: npm publish ./pkg
+    env: 
+      NODE_AUTH_TOKEN: ${{ secrets.NPM_API_TOKEN }}
