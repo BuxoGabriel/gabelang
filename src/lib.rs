@@ -166,13 +166,13 @@ impl Gabelang {
     /// Pushes a new stack frame on to the stack
     #[cfg_attr(feature="wasm", wasm_bindgen)]
     pub fn push_frame(&mut self) {
-        self.runtime.global_stack.push_scope();
+        self.runtime.current_context().push_scope();
     }
 
     /// Pops a stack frame off of the stack
     #[cfg_attr(feature="wasm", wasm_bindgen)]
     pub fn pop_frame(&mut self) -> bool {
-        match self.runtime.global_stack.pop_scope() {
+        match self.runtime.current_context().pop_scope() {
             Ok(_) => true,
             Err(_) => false
         }
