@@ -128,6 +128,7 @@ cargo test
 - Built in Functions(print, file, fetch, input)
 - Add tests to ast and eval modules
 - Add fun language syntax
+- Improve garbage collector to use mark and sweep
 
 ### Todo Reach
 
