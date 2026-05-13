@@ -1,3 +1,4 @@
+use std::fs;
 use std::{fmt::Display, error::Error, rc::Rc};
 use std::collections::HashMap;
 
@@ -23,6 +24,8 @@ pub fn load_built_ins() -> HashMap<String, Rc<dyn BuiltIn>> {
     hash_map.insert("len".to_string(), Len{}.as_built_in());
     hash_map.insert("reverse".to_string(), Reverse{}.as_built_in());
     hash_map.insert("abs".to_string(), Abs{}.as_built_in());
+    hash_map.insert("open".to_string(), Open{}.as_built_in());
+    hash_map.insert("print".to_string(), Print{}.as_built_in());
     hash_map
 }
 
@@ -42,7 +45,7 @@ impl BuiltIn for Len {
     }
 
     fn eval(&self, rt: &mut Runtime) -> BuiltInResult<Object> {
-        let obj = rt.global_stack.get_var("_obj");
+        let obj = rt.current_context().get_var("_obj");
         if obj.is_err() {
             return Err(BuiltInError("Built-In \"len\" did not recieve expected arg \"_arr\"".to_owned()))
         };
@@ -71,7 +74,7 @@ impl BuiltIn for Reverse {
         ]
     }
     fn eval(&self, rt: &mut Runtime) -> BuiltInResult<Object> {
-        let obj = rt.global_stack.get_var("_obj");
+        let obj = rt.current_context().get_var("_obj");
         if obj.is_err() {
             return Err(BuiltInError("Built-In \"reverse\" did not recieve expected arg \"_obj\"".to_owned()))
         }
@@ -99,7 +102,7 @@ impl BuiltIn for Abs {
     }
 
     fn eval(&self, rt: &mut Runtime) -> BuiltInResult<Object> {
-        let _num = rt.global_stack.get_var("_num");
+        let _num = rt.current_context().get_var("_num");
         if _num.is_err() {
             return Err(BuiltInError("Built-In \"abs\" did not recieve arg abs".to_owned()));
         }
@@ -108,6 +111,66 @@ impl BuiltIn for Abs {
         match num {
             ObjectInner::NUMBER(num) => Ok(ObjectInner::NUMBER(num.abs()).as_object()),
             _ => Err(BuiltInError("Built-In \"abs\" expects first argument to be a number".to_owned()))
+        }
+    }
+
+    fn as_built_in(self) -> Rc<dyn BuiltIn> {
+        Rc::from(self)
+    }
+}
+
+struct Open{}
+
+impl BuiltIn for Open {
+    fn get_params(&self) -> Vec<String> {
+        vec![
+            "_path".to_string(),
+        ]
+    }
+
+    fn eval(&self, rt: &mut Runtime) -> BuiltInResult<Object> {
+        let _path = rt.current_context().get_var("_path");
+        if _path.is_err() {
+            return Err(BuiltInError("Built-In \"open\" did not recieve arg _path".to_owned()));
+        }
+        let _path = _path.unwrap();
+        let _path = &*_path.inner();
+        match _path {
+            ObjectInner::STRING(path) => {
+                let content = fs::read_to_string(path).map_err(|_| BuiltInError("Built-In \"open\" failed to read file!".to_owned()))?;
+                Ok(ObjectInner::STRING(content).as_object())
+            },
+            _ => Err(BuiltInError("Built-In \"open\" expects first argument to be a string".to_owned()))
+        }
+    }
+
+    fn as_built_in(self) -> Rc<dyn BuiltIn> {
+        Rc::from(self)
+    }
+}
+
+struct Print{}
+
+impl BuiltIn for Print {
+    fn get_params(&self) -> Vec<String> {
+        vec![
+            "_content".to_string(),
+        ]
+    }
+
+    fn eval(&self, rt: &mut Runtime) -> BuiltInResult<Object> {
+        let _content = rt.current_context().get_var("_content");
+        if _content.is_err() {
+            return Err(BuiltInError("Built-In \"print\" did not recieve arg _content".to_owned()));
+        }
+        let _content = _content.unwrap();
+        let _content = &*_content.inner();
+        match _content {
+            ObjectInner::STRING(content) => {
+                println!("{content}");
+                Ok(ObjectInner::NULL.as_object())
+            },
+            _ => Err(BuiltInError("Built-In \"print\" expects first argument to be a string".to_owned()))
         }
     }
 

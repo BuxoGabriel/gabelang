@@ -16,7 +16,8 @@ enum ParserErrorType {
     },
     TokenNotInfixOp(TokenNotInfixOpErr),
     LexerError(LexerError),
-    UnexpectedEOF
+    UnexpectedEOF,
+    UnexpectedSEMICOLON
 }
 
 impl From<ast::TokenNotInfixOpErr> for ParserErrorType {
@@ -29,6 +30,7 @@ impl Display for ParserErrorType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::UnexpectedEOF => f.write_str("Unexpected end of file"),
+            Self::UnexpectedSEMICOLON => f.write_str("Unexpected semicolon"),
             Self::TokenNotInfixOp(err) => write!(f, "{}", err),
             Self::LexerError(err) => write!(f, "{}", err),
             Self::UnexpectedToken { expected_token, recieved_token } => write!(f, "Expected token {}, found {}", expected_token, recieved_token),
@@ -185,6 +187,7 @@ impl<'a> Parser<'a> {
                 Token::LPAREN => {
                     let func_call = self.parse_function_call(assignable)?;
                     if self.is_eof()? || self.peek_token_is(&Token::SEMICOLON)? {
+                        self.skip_optional_token(&Token::SEMICOLON)?;
                         return Ok(ast::Statement::Expression(func_call))
                     }
                     let expression = self.parse_infix(func_call)?;
@@ -371,6 +374,9 @@ impl<'a> Parser<'a> {
         if self.is_eof()? {
             return Err(self.error(ParserErrorType::UnexpectedEOF));
         }
+        if self.peek_token_is(&Token::SEMICOLON)? {
+            return Err(self.error(ParserErrorType::UnexpectedSEMICOLON));
+        }
         // Return group expression if expression starts with an open paren
         if self.peek_token_is(&Token::LPAREN)? {
             return Ok(self.parse_group_expression()?)
@@ -385,6 +391,9 @@ impl<'a> Parser<'a> {
         // Get "left side" of the expression
         let mut left_side: ast::Expression = self.parse_prefix()?;
         while !self.is_eof()? {
+            if self.peek_token_is(&Token::SEMICOLON)? {
+                return Ok(left_side);
+            }
             // Recursively parse right side of equation and build on expression "left side"
             let op_prec: i8 = Self::token_type_precedence(self.peek_next_token()?.unwrap().clone());
             // If reaches a lower precidence operation than its parent call it should not simplify
@@ -779,6 +788,37 @@ mod tests {
                 }),
                 op: ast::InfixOp::Mult
             })])
+        )
+    }
+
+    #[test]
+    fn open_and_print_file() {
+        let input = "fn main() { let contents = open(\"app.gl2\"); print(contents); } main();".to_string();
+        assert_eq!(
+            Parser::new(&input).parse_program(),
+            Ok(vec![
+                ast::Statement::FuncDecl(ast::Function {
+                    ident: String::from("main"),
+                    params: vec![],
+                    body: vec![
+                        ast::Statement::Let {
+                            ident: String::from("contents"),
+                            expression:  ast::Expression::FuncCall {
+                                func: ast::Assignable::Var(String::from("open")),
+                                params: vec![ast::Expression::Literal(ast::Literal::StringLit(String::from("app.gl2")))]
+                            }
+                        },
+                        ast::Statement::Expression(ast::Expression::FuncCall {
+                            func: ast::Assignable::Var(String::from("print")),
+                            params: vec![ast::Expression::Assignable(ast::Assignable::Var(String::from("contents")))]
+                        })
+                    ]
+                }),
+                ast::Statement::Expression(ast::Expression::FuncCall {
+                    func: ast::Assignable::Var(String::from("main")),
+                    params: vec![]
+                })
+            ])
         )
     }
 }
