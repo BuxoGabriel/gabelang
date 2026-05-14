@@ -162,7 +162,15 @@ impl Runtime {
 
     fn get_assignable(&mut self, assignable: &Assignable) -> RuntimeResult<Object> {
         match assignable {
-            Assignable::Var(var) => Ok(self.current_context().get_var(&var)?),
+            Assignable::Var(var) => {
+                match self.current_context().get_var(&var) {
+                    Ok(obj) => Ok(obj),
+                    Err(_) if self.loaded_stack.is_some() => {
+                        Ok(self.global_stack.get_var(&var)?)
+                    }
+                    Err(err) => Err(err.into())
+                }
+            },
             Assignable::PropIndex { obj, index } => {
                 let index = self.eval_expression(index)?;
                 let index: &ObjectInner = &index.inner();
@@ -262,7 +270,7 @@ impl Runtime {
     fn eval_statement(&mut self, statement: &Statement) -> RuntimeResult<GabrValue> {
         match statement {
             Statement::Expression(expression) => {
-                Ok(GabrValue::new(self.eval_expression(expression)?, true))
+                Ok(GabrValue::new(self.eval_expression(expression)?, false))
             },
             Statement::Let { ident, expression } => {
                 let val = self.eval_expression(expression)?;
@@ -454,10 +462,12 @@ impl Runtime {
         // look in all scopes for a function that matches function name
         let func = self.get_assignable(func_locator).ok();
         if let Some(func) = func {
-            let func = &mut *func.inner();
-            let func = match func {
-                ObjectInner::FUNCTION(func) => func.clone(),
-                _ => return Err(RuntimeError::InvalidFunctionCallTarget)
+            let func = {
+                let inner = func.inner();
+                match &*inner {
+                    ObjectInner::FUNCTION(f) => f.clone(),
+                    _ => return Err(RuntimeError::InvalidFunctionCallTarget)
+                }
             };
             // Create (parameter, value) list
             let params: RuntimeResult<Vec<(String, Object)>> = func.ast.params.iter()

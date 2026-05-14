@@ -1,4 +1,5 @@
 use std::fs;
+use std::io::{self, Write};
 use std::{fmt::Display, error::Error, rc::Rc};
 use std::collections::HashMap;
 
@@ -26,6 +27,10 @@ pub fn load_built_ins() -> HashMap<String, Rc<dyn BuiltIn>> {
     hash_map.insert("abs".to_string(), Abs{}.as_built_in());
     hash_map.insert("open".to_string(), Open{}.as_built_in());
     hash_map.insert("print".to_string(), Print{}.as_built_in());
+    hash_map.insert("char_code".to_string(), CharCode{}.as_built_in());
+    hash_map.insert("substring".to_string(), Substring{}.as_built_in());
+    hash_map.insert("concat".to_string(), Concat{}.as_built_in());
+    hash_map.insert("prompt".to_string(), Prompt{}.as_built_in());
     hash_map
 }
 
@@ -165,13 +170,145 @@ impl BuiltIn for Print {
         }
         let _content = _content.unwrap();
         let _content = &*_content.inner();
-        match _content {
-            ObjectInner::STRING(content) => {
-                println!("{content}");
-                Ok(ObjectInner::NULL.as_object())
-            },
-            _ => Err(BuiltInError("Built-In \"print\" expects first argument to be a string".to_owned()))
+        println!("{_content}");
+        Ok(ObjectInner::NULL.as_object())
+    }
+
+    fn as_built_in(self) -> Rc<dyn BuiltIn> {
+        Rc::from(self)
+    }
+}
+
+struct CharCode{}
+
+impl BuiltIn for CharCode {
+    fn get_params(&self) -> Vec<String> {
+        vec![
+            "_s".to_string(),
+            "_i".to_string(),
+        ]
+    }
+
+    fn eval(&self, rt: &mut Runtime) -> BuiltInResult<Object> {
+        let s = rt.current_context().get_var("_s")
+            .map_err(|_| BuiltInError("Built-In \"char_code\" did not recieve arg _s".to_owned()))?;
+        let i = rt.current_context().get_var("_i")
+            .map_err(|_| BuiltInError("Built-In \"char_code\" did not recieve arg _i".to_owned()))?;
+        let s = s.inner();
+        let i = i.inner();
+        let string = match &*s {
+            ObjectInner::STRING(string) => string,
+            _ => return Err(BuiltInError("Built-In \"char_code\" expects first argument to be a string".to_owned()))
+        };
+        let index = match &*i {
+            ObjectInner::NUMBER(num) => *num,
+            _ => return Err(BuiltInError("Built-In \"char_code\" expects second argument to be a number".to_owned()))
+        };
+        if index < 0 || (index as usize) >= string.len() {
+            return Err(BuiltInError("Built-In \"char_code\" index out of bounds".to_owned()));
         }
+        let byte = string.as_bytes()[index as usize];
+        Ok(ObjectInner::NUMBER(byte as i64).as_object())
+    }
+
+    fn as_built_in(self) -> Rc<dyn BuiltIn> {
+        Rc::from(self)
+    }
+}
+
+struct Substring{}
+
+impl BuiltIn for Substring {
+    fn get_params(&self) -> Vec<String> {
+        vec![
+            "_s".to_string(),
+            "_start".to_string(),
+            "_end".to_string(),
+        ]
+    }
+
+    fn eval(&self, rt: &mut Runtime) -> BuiltInResult<Object> {
+        let s = rt.current_context().get_var("_s")
+            .map_err(|_| BuiltInError("Built-In \"substring\" did not recieve arg _s".to_owned()))?;
+        let start = rt.current_context().get_var("_start")
+            .map_err(|_| BuiltInError("Built-In \"substring\" did not recieve arg _start".to_owned()))?;
+        let end = rt.current_context().get_var("_end")
+            .map_err(|_| BuiltInError("Built-In \"substring\" did not recieve arg _end".to_owned()))?;
+        let s = s.inner();
+        let start = start.inner();
+        let end = end.inner();
+        let string = match &*s {
+            ObjectInner::STRING(string) => string,
+            _ => return Err(BuiltInError("Built-In \"substring\" expects first argument to be a string".to_owned()))
+        };
+        let start = match &*start {
+            ObjectInner::NUMBER(num) => *num,
+            _ => return Err(BuiltInError("Built-In \"substring\" expects second argument to be a number".to_owned()))
+        };
+        let end = match &*end {
+            ObjectInner::NUMBER(num) => *num,
+            _ => return Err(BuiltInError("Built-In \"substring\" expects third argument to be a number".to_owned()))
+        };
+        if start < 0 || end < 0 || start > end || (end as usize) > string.len() {
+            return Err(BuiltInError("Built-In \"substring\" index out of bounds".to_owned()));
+        }
+        let slice = string[start as usize..end as usize].to_owned();
+        Ok(ObjectInner::STRING(slice).as_object())
+    }
+
+    fn as_built_in(self) -> Rc<dyn BuiltIn> {
+        Rc::from(self)
+    }
+}
+
+struct Prompt{}
+
+impl BuiltIn for Prompt {
+    fn get_params(&self) -> Vec<String> {
+        vec![
+            "_msg".to_string(),
+        ]
+    }
+
+    fn eval(&self, rt: &mut Runtime) -> BuiltInResult<Object> {
+        let msg = rt.current_context().get_var("_msg")
+            .map_err(|_| BuiltInError("Built-In \"prompt\" did not recieve arg _msg".to_owned()))?;
+        let msg = msg.inner();
+        let msg = match &*msg {
+            ObjectInner::STRING(string) => string.clone(),
+            _ => return Err(BuiltInError("Built-In \"prompt\" expects first argument to be a string".to_owned()))
+        };
+        print!("{msg}");
+        io::stdout().flush().map_err(|e| BuiltInError(format!("Built-In \"prompt\" failed to flush stdout: {e}")))?;
+        let mut buf = String::new();
+        io::stdin().read_line(&mut buf).map_err(|e| BuiltInError(format!("Built-In \"prompt\" failed to read input: {e}")))?;
+        if buf.ends_with('\n') { buf.pop(); }
+        if buf.ends_with('\r') { buf.pop(); }
+        Ok(ObjectInner::STRING(buf).as_object())
+    }
+
+    fn as_built_in(self) -> Rc<dyn BuiltIn> {
+        Rc::from(self)
+    }
+}
+
+struct Concat{}
+
+impl BuiltIn for Concat {
+    fn get_params(&self) -> Vec<String> {
+        vec![
+            "_a".to_string(),
+            "_b".to_string(),
+        ]
+    }
+
+    fn eval(&self, rt: &mut Runtime) -> BuiltInResult<Object> {
+        let a = rt.current_context().get_var("_a")
+            .map_err(|_| BuiltInError("Built-In \"concat\" did not recieve arg _a".to_owned()))?;
+        let b = rt.current_context().get_var("_b")
+            .map_err(|_| BuiltInError("Built-In \"concat\" did not recieve arg _b".to_owned()))?;
+        let combined = format!("{}{}", &*a.inner(), &*b.inner());
+        Ok(ObjectInner::STRING(combined).as_object())
     }
 
     fn as_built_in(self) -> Rc<dyn BuiltIn> {

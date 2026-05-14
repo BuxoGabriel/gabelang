@@ -1,0 +1,507 @@
+// =====================================================================
+// Gabelang2 Parser
+// Parses programs in the Gabelang2 toy language defined in gabelang2.md.
+//
+// Grammar (see gabelang2.md):
+//   Program    := Assignment*
+//   Assignment := Ident '=' Exp ';' | 'let' Ident '=' Exp ';'
+//   Exp        := Exp '+' Term | Exp '-' Term | Term
+//   Term       := Term '*' Fact | Fact
+//   Fact       := '(' Exp ')' | '-' Fact | '+' Fact | Literal | Ident
+//
+// Style: procedural. Module-level globals hold lexer/parser state; every
+// stage is a top-level function operating over that state.
+// =====================================================================
+
+
+// ----- Token kinds (numeric so we can compare with '==' safely) -----
+let TK_NUM    = 1;
+let TK_ID     = 2;
+let TK_LET    = 3;
+let TK_PLUS   = 4;
+let TK_MINUS  = 5;
+let TK_STAR   = 6;
+let TK_EQ     = 7;
+let TK_LPAREN = 8;
+let TK_RPAREN = 9;
+let TK_SEMI   = 10;
+let TK_EOF    = 11;
+
+// ----- AST node kinds -----
+let N_PROG = 1;
+let N_ASGN = 2;
+let N_BIN  = 3;
+let N_UN   = 4;
+let N_NUM  = 5;
+let N_ID   = 6;
+
+// ----- Binary/unary operator tags -----
+let OP_ADD = 1;
+let OP_SUB = 2;
+let OP_MUL = 3;
+
+// ----- Module-level state -----
+let SRC = "";
+let SRC_LEN = 0;
+let SRC_POS = 0;
+
+let TOKENS = [];
+let TOK_LEN = 0;
+let TOK_POS = 0;
+
+let HAD_ERROR = 0;
+
+
+// =====================================================================
+// Character classification (operates on ASCII char codes)
+// =====================================================================
+
+fn is_digit(c) {
+    if(c < 48) { return 0; }
+    if(c > 57) { return 0; }
+    return 1;
+}
+
+fn is_letter(c) {
+    // underscore
+    if(c == 95) { return 1; }
+    // A-Z
+    if(c < 65) { return 0; }
+    if(c < 91) { return 1; }
+    // a-z
+    if(c < 97) { return 0; }
+    if(c < 123) { return 1; }
+    return 0;
+}
+
+fn is_alnum(c) {
+    if(is_letter(c)) { return 1; }
+    if(is_digit(c)) { return 1; }
+    return 0;
+}
+
+fn is_ws(c) {
+    if(c == 32) { return 1; }
+    if(c == 9)  { return 1; }
+    if(c == 10) { return 1; }
+    if(c == 13) { return 1; }
+    return 0;
+}
+
+
+// =====================================================================
+// Error reporting
+// =====================================================================
+
+fn report_error(msg) {
+    HAD_ERROR = 1;
+    print(concat("Error: ", msg));
+}
+
+
+// =====================================================================
+// Tokenizer
+// =====================================================================
+
+fn push_tok(t) {
+    TOKENS[TOK_LEN] = t;
+    TOK_LEN = TOK_LEN + 1;
+}
+
+fn skip_ws() {
+    while(SRC_POS < SRC_LEN) {
+        let c = char_code(SRC, SRC_POS);
+        if(is_ws(c) == 0) {
+            return 0;
+        }
+        SRC_POS = SRC_POS + 1;
+    }
+    return 0;
+}
+
+fn lex_number() {
+    let c = char_code(SRC, SRC_POS);
+    // The grammar restricts a leading '0' to mean exactly the literal 0.
+    if(c == 48) {
+        SRC_POS = SRC_POS + 1;
+        push_tok({k: TK_NUM, v: 0});
+        return 0;
+    }
+    let val = 0;
+    let more = 1;
+    while(more) {
+        let in_range = 0;
+        if(SRC_POS < SRC_LEN) { in_range = 1; }
+        if(in_range) {
+            let cc = char_code(SRC, SRC_POS);
+            if(is_digit(cc)) {
+                val = val * 10 + (cc - 48);
+                SRC_POS = SRC_POS + 1;
+            }
+            if(is_digit(cc) == 0) {
+                more = 0;
+            }
+        }
+        if(in_range == 0) {
+            more = 0;
+        }
+    }
+    push_tok({k: TK_NUM, v: val});
+    return 0;
+}
+
+fn ident_is_let(start, stop) {
+    let length_ok = 0;
+    if(stop - start == 3) { length_ok = 1; }
+    if(length_ok == 0) { return 0; }
+    let c0 = char_code(SRC, start);
+    let c1 = char_code(SRC, start + 1);
+    let c2 = char_code(SRC, start + 2);
+    let all_ok = 0;
+    if(c0 == 108) {           // 'l'
+        if(c1 == 101) {       // 'e'
+            if(c2 == 116) {   // 't'
+                all_ok = 1;
+            }
+        }
+    }
+    return all_ok;
+}
+
+fn lex_ident() {
+    let start = SRC_POS;
+    let more = 1;
+    while(more) {
+        let in_range = 0;
+        if(SRC_POS < SRC_LEN) { in_range = 1; }
+        if(in_range) {
+            let c = char_code(SRC, SRC_POS);
+            if(is_alnum(c)) {
+                SRC_POS = SRC_POS + 1;
+            }
+            if(is_alnum(c) == 0) {
+                more = 0;
+            }
+        }
+        if(in_range == 0) {
+            more = 0;
+        }
+    }
+    if(ident_is_let(start, SRC_POS)) {
+        push_tok({k: TK_LET});
+        return 0;
+    }
+    let name = substring(SRC, start, SRC_POS);
+    push_tok({k: TK_ID, v: name});
+    return 0;
+}
+
+fn lex_punct(c) {
+    if(c == 43) { push_tok({k: TK_PLUS});   SRC_POS = SRC_POS + 1; return 1; }
+    if(c == 45) { push_tok({k: TK_MINUS});  SRC_POS = SRC_POS + 1; return 1; }
+    if(c == 42) { push_tok({k: TK_STAR});   SRC_POS = SRC_POS + 1; return 1; }
+    if(c == 61) { push_tok({k: TK_EQ});     SRC_POS = SRC_POS + 1; return 1; }
+    if(c == 40) { push_tok({k: TK_LPAREN}); SRC_POS = SRC_POS + 1; return 1; }
+    if(c == 41) { push_tok({k: TK_RPAREN}); SRC_POS = SRC_POS + 1; return 1; }
+    if(c == 59) { push_tok({k: TK_SEMI});   SRC_POS = SRC_POS + 1; return 1; }
+    return 0;
+}
+
+fn tokenize() {
+    let running = 1;
+    while(running) {
+        skip_ws();
+        let in_range = 0;
+        if(SRC_POS < SRC_LEN) { in_range = 1; }
+        if(in_range == 0) {
+            running = 0;
+        }
+        if(running) {
+            let c = char_code(SRC, SRC_POS);
+            let handled = 0;
+            if(is_digit(c)) {
+                lex_number();
+                handled = 1;
+            }
+            if(handled == 0) {
+                if(is_letter(c)) {
+                    lex_ident();
+                    handled = 1;
+                }
+            }
+            if(handled == 0) {
+                handled = lex_punct(c);
+            }
+            if(handled == 0) {
+                report_error(concat("Unexpected character code ", c));
+                SRC_POS = SRC_POS + 1;
+            }
+        }
+    }
+    push_tok({k: TK_EOF});
+    return 0;
+}
+
+
+// =====================================================================
+// Parser (recursive descent over the token stream)
+// =====================================================================
+
+fn peek_kind() {
+    let t = TOKENS[TOK_POS];
+    return t.k;
+}
+
+fn peek_tok() {
+    return TOKENS[TOK_POS];
+}
+
+fn parse_program() {
+    let body = [];
+    let count = 0;
+    let running = 1;
+    while(running) {
+        if(HAD_ERROR) {
+            running = 0;
+        }
+        if(running) {
+            if(peek_kind() == TK_EOF) {
+                running = 0;
+            }
+        }
+        if(running) {
+            let stmt = parse_assignment();
+            body[count] = stmt;
+            count = count + 1;
+        }
+    }
+    return {t: N_PROG, body: body, count: count};
+}
+
+fn parse_assignment() {
+    let is_let = 0;
+    if(peek_kind() == TK_LET) {
+        is_let = 1;
+        TOK_POS = TOK_POS + 1;
+    }
+    let id_tok = peek_tok();
+    let bad_id = 1;
+    if(id_tok.k == TK_ID) { bad_id = 0; }
+    if(bad_id) {
+        report_error("Expected identifier in assignment");
+        return {t: N_ASGN, isLet: is_let, name: "<error>", val: {t: N_NUM, val: 0}};
+    }
+    TOK_POS = TOK_POS + 1;
+
+    let need_eq = 1;
+    if(peek_kind() == TK_EQ) { need_eq = 0; }
+    if(need_eq) {
+        report_error("Expected '=' in assignment");
+        return {t: N_ASGN, isLet: is_let, name: id_tok.v, val: {t: N_NUM, val: 0}};
+    }
+    TOK_POS = TOK_POS + 1;
+
+    let val = parse_exp();
+
+    let need_semi = 1;
+    if(peek_kind() == TK_SEMI) {
+        need_semi = 0;
+        TOK_POS = TOK_POS + 1;
+    }
+    if(need_semi) {
+        report_error("Expected ';' after assignment");
+    }
+    return {t: N_ASGN, isLet: is_let, name: id_tok.v, val: val};
+}
+
+fn parse_exp() {
+    let left = parse_term();
+    let more = 1;
+    while(more) {
+        let k = peek_kind();
+        let matched = 0;
+        if(k == TK_PLUS) {
+            TOK_POS = TOK_POS + 1;
+            let right = parse_term();
+            left = {t: N_BIN, op: OP_ADD, lhs: left, rhs: right};
+            matched = 1;
+        }
+        if(matched == 0) {
+            if(k == TK_MINUS) {
+                TOK_POS = TOK_POS + 1;
+                let right = parse_term();
+                left = {t: N_BIN, op: OP_SUB, lhs: left, rhs: right};
+                matched = 1;
+            }
+        }
+        if(matched == 0) {
+            more = 0;
+        }
+        if(HAD_ERROR) {
+            more = 0;
+        }
+    }
+    return left;
+}
+
+fn parse_term() {
+    let left = parse_fact();
+    let more = 1;
+    while(more) {
+        let k = peek_kind();
+        let matched = 0;
+        if(k == TK_STAR) {
+            TOK_POS = TOK_POS + 1;
+            let right = parse_fact();
+            left = {t: N_BIN, op: OP_MUL, lhs: left, rhs: right};
+            matched = 1;
+        }
+        if(matched == 0) {
+            more = 0;
+        }
+        if(HAD_ERROR) {
+            more = 0;
+        }
+    }
+    return left;
+}
+
+fn parse_fact() {
+    let t = peek_tok();
+    if(t.k == TK_LPAREN) {
+        TOK_POS = TOK_POS + 1;
+        let inner = parse_exp();
+        let need_close = 1;
+        if(peek_kind() == TK_RPAREN) {
+            need_close = 0;
+            TOK_POS = TOK_POS + 1;
+        }
+        if(need_close) {
+            report_error("Expected ')'");
+        }
+        return inner;
+    }
+    if(t.k == TK_MINUS) {
+        TOK_POS = TOK_POS + 1;
+        let inner = parse_fact();
+        return {t: N_UN, op: OP_SUB, arg: inner};
+    }
+    if(t.k == TK_PLUS) {
+        TOK_POS = TOK_POS + 1;
+        let inner = parse_fact();
+        return {t: N_UN, op: OP_ADD, arg: inner};
+    }
+    if(t.k == TK_NUM) {
+        TOK_POS = TOK_POS + 1;
+        return {t: N_NUM, val: t.v};
+    }
+    if(t.k == TK_ID) {
+        TOK_POS = TOK_POS + 1;
+        return {t: N_ID, name: t.v};
+    }
+    report_error("Expected expression (literal, identifier, or '(')");
+    return {t: N_NUM, val: 0};
+}
+
+
+// =====================================================================
+// AST printer
+// =====================================================================
+
+fn op_str(op) {
+    if(op == OP_ADD) { return "+"; }
+    if(op == OP_SUB) { return "-"; }
+    if(op == OP_MUL) { return "*"; }
+    return "?";
+}
+
+fn make_indent(n) {
+    let s = "";
+    let i = 0;
+    while(i < n) {
+        s = concat(s, "  ");
+        i = i + 1;
+    }
+    return s;
+}
+
+fn print_node(node, depth) {
+    let pre = make_indent(depth);
+    if(node.t == N_PROG) {
+        print(concat(pre, concat("Program (", concat(node.count, " stmts)"))));
+        let i = 0;
+        while(i < node.count) {
+            print_node(node.body[i], depth + 1);
+            i = i + 1;
+        }
+        return 0;
+    }
+    if(node.t == N_ASGN) {
+        let lbl = "Assign";
+        if(node.isLet) {
+            lbl = "LetAssign";
+        }
+        print(concat(pre, concat(lbl, concat(" ", node.name))));
+        print_node(node.val, depth + 1);
+        return 0;
+    }
+    if(node.t == N_BIN) {
+        print(concat(pre, concat("BinOp ", op_str(node.op))));
+        print_node(node.lhs, depth + 1);
+        print_node(node.rhs, depth + 1);
+        return 0;
+    }
+    if(node.t == N_UN) {
+        print(concat(pre, concat("Unary ", op_str(node.op))));
+        print_node(node.arg, depth + 1);
+        return 0;
+    }
+    if(node.t == N_NUM) {
+        print(concat(pre, concat("Num ", node.val)));
+        return 0;
+    }
+    if(node.t == N_ID) {
+        print(concat(pre, concat("Ident ", node.name)));
+        return 0;
+    }
+    print(concat(pre, "<unknown node>"));
+    return 0;
+}
+
+
+// =====================================================================
+// Driver
+// =====================================================================
+
+fn run_parser(path) {
+    SRC = open(path);
+    SRC_LEN = len(SRC);
+    SRC_POS = 0;
+    TOKENS = [];
+    TOK_LEN = 0;
+    TOK_POS = 0;
+    HAD_ERROR = 0;
+
+    tokenize();
+    if(HAD_ERROR) {
+        print("Aborted: tokenization failed.");
+        return 0;
+    }
+
+    let ast = parse_program();
+    if(HAD_ERROR) {
+        print("Aborted: parsing failed.");
+        return 0;
+    }
+
+    print("--- AST ---");
+    print_node(ast, 0);
+    return 0;
+}
+
+fn main() {
+    run_parser("./examples/app.gl2");
+    return 0;
+}
+
+main();

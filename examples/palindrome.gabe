@@ -1,0 +1,35 @@
+// Palindrome checker using char_code for byte-by-byte comparison.
+// Expected output:
+//   [racecar] -> true
+//   [hello]   -> false
+//   []        -> true
+//   [a]       -> true
+//   [abba]    -> true
+//   [abca]    -> false
+
+fn is_palindrome(s) {
+    let lo = 0;
+    let hi = len(s) - 1;
+    while(lo < hi) {
+        if(char_code(s, lo) != char_code(s, hi)) {
+            return False;
+        }
+        lo = lo + 1;
+        hi = hi - 1;
+    }
+    return True;
+}
+
+fn check(s) {
+    let label = concat(concat("[", s), "]");
+    return concat(concat(label, " -> "), is_palindrome(s));
+}
+
+let out = print(check("racecar"));
+out = print(check("hello"));
+out = print(check(""));
+out = print(check("a"));
+out = print(check("abba"));
+out = print(check("abca"));
+
+return;

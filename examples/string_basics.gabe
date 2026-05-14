@@ -1,0 +1,30 @@
+// Demonstrates char_code, substring, and concat
+// Expected output:
+//   greeting: Hello, World!
+//   length: 13
+//   byte 0  (H = 72): 72
+//   byte 5  (, = 44): 44
+//   byte 12 (! = 33): 33
+//   substring(0,5): Hello
+//   substring(7,12): World
+//   concat(num, num): 12
+//   concat(neg,str): -7 apples
+//   concat(str,str): foobar
+
+let greeting = "Hello, World!";
+
+let out = print(concat("greeting: ", greeting));
+out = print(concat("length: ", len(greeting)));
+
+out = print(concat("byte 0  (H = 72): ", char_code(greeting, 0)));
+out = print(concat("byte 5  (, = 44): ", char_code(greeting, 5)));
+out = print(concat("byte 12 (! = 33): ", char_code(greeting, 12)));
+
+out = print(concat("substring(0,5): ", substring(greeting, 0, 5)));
+out = print(concat("substring(7,12): ", substring(greeting, 7, 12)));
+
+out = print(concat("concat(num, num): ", concat(1, 2)));
+out = print(concat("concat(neg,str): ", concat(-7, " apples")));
+out = print(concat("concat(str,str): ", concat("foo", "bar")));
+
+return greeting;
