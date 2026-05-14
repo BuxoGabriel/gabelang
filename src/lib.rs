@@ -58,6 +58,10 @@ impl Config {
 
     fn parse_flags(args: &[String]) -> HashMap<String, String> {
         let mut map = HashMap::<String, String>::new();
+        if args.len() == 2 {
+            map.insert("file".to_string(), args[1].clone());
+            return map;
+        };
         args.windows(2).for_each(|pair| {
             match pair[0].clone().split_once("--") {
                 Some((_, flag)) => {
