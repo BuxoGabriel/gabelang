@@ -404,58 +404,45 @@ impl Runtime {
     fn eval_infix(&mut self, op: InfixOp, left: &Expression, right: &Expression) -> RuntimeResult<Object> {
         let op1 = self.eval_expression(left)?.inner().clone();
         let op2 = self.eval_expression(right)?.inner().clone();
-        let op1 = match op1 {
-            ObjectInner::NUMBER(num) => num,
-            ObjectInner::BOOL(bool) => bool as i64,
-            ObjectInner::STRING(string1) => {
-                if let ObjectInner::STRING(string2) = op2 {
-                    return Ok(ObjectInner::STRING(string1 + &string2).as_object());
-                } else {
-                    return Err(RuntimeError::InvalidInfixTarget)
-                }
+        match (op1, op2) {
+            (ObjectInner::STRING(s1), ObjectInner::STRING(s2)) => Self::eval_string_infix(op, s1, s2),
+            (op1, op2) => {
+                let n1 = match op1 {
+                    ObjectInner::NUMBER(n) => n,
+                    ObjectInner::BOOL(b) => b as i64,
+                    _ => return Err(RuntimeError::InvalidInfixTarget),
+                };
+                let n2 = match op2 {
+                    ObjectInner::NUMBER(n) => n,
+                    ObjectInner::BOOL(b) => b as i64,
+                    _ => return Err(RuntimeError::InvalidInfixTarget),
+                };
+                Self::eval_numeric_infix(op, n1, n2)
             }
-            _ => return Err(RuntimeError::InvalidInfixTarget)
-        };
-        let op2 = match op2 {
-            ObjectInner::NUMBER(num) => num,
-            ObjectInner::BOOL(bool) => bool as i64,
-            _ => return Err(RuntimeError::InvalidInfixTarget)
-        };
+        }
+    }
+
+    fn eval_numeric_infix(op: InfixOp, op1: i64, op2: i64) -> RuntimeResult<Object> {
         let val = match op {
             InfixOp::Add => op1 + op2,
             InfixOp::Sub => op1 - op2,
             InfixOp::Mult => op1 * op2,
             InfixOp::Div => op1 / op2,
-            InfixOp::Eq => {
-                if op1 == op2 {
-                    1
-                } else {
-                    0
-                }
-            },
-            InfixOp::NotEq => {
-                if op1 != op2 {
-                    1
-                } else {
-                    0
-                }
-            }
-            InfixOp::Gt => {
-                if op1 > op2 {
-                    1
-                } else {
-                    0
-                }
-            },
-            InfixOp::Lt => {
-                if op1 < op2 {
-                    1
-                } else {
-                    0
-                }
-            }
+            InfixOp::Eq => (op1 == op2) as i64,
+            InfixOp::NotEq => (op1 != op2) as i64,
+            InfixOp::Gt => (op1 > op2) as i64,
+            InfixOp::Lt => (op1 < op2) as i64,
         };
         Ok(ObjectInner::NUMBER(val).as_object())
+    }
+
+    fn eval_string_infix(op: InfixOp, s1: String, s2: String) -> RuntimeResult<Object> {
+        match op {
+            InfixOp::Add => Ok(ObjectInner::STRING(s1 + &s2).as_object()),
+            InfixOp::Eq => Ok(ObjectInner::NUMBER((s1 == s2) as i64).as_object()),
+            InfixOp::NotEq => Ok(ObjectInner::NUMBER((s1 != s2) as i64).as_object()),
+            _ => Err(RuntimeError::InvalidInfixTarget),
+        }
     }
 
     fn eval_function_call(&mut self, func_locator: &Assignable, params: &Vec<Expression>) -> RuntimeResult<Object> {
