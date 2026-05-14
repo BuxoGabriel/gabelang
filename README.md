@@ -59,12 +59,12 @@ fn double_num(num) {
 **len(obj) -> number**
 
 - returns the length of an array or string
-- returns the amount of keys in an object
-- throws an error if provided with something other than an array or string
+- returns the number of keys in an object
+- throws an error if provided with something other than an array, object, or string
 
 ___
 
-**reverse(obj) -> number**
+**reverse(obj) -> array | string**
 
 - returns a new reversed array or string without changing the parameter object
 - throws an error if provided with something other than an array or string
@@ -75,6 +75,51 @@ ___
 
 - returns the absolute value of a passed in number
 - throws an error if provided with something other than a number
+
+___
+
+**open(path) -> string**
+
+- returns the contents of the file at `path` as a string
+- throws an error if file reading fails
+- throws an error if provided with something other than a string
+
+___
+
+**print(any) -> null**
+
+- prints a value to stdout followed by a newline
+- accepts any value (numbers, strings, arrays, objects, booleans, null, functions)
+
+___
+
+**prompt(string) -> string**
+
+- prints the prompt message to stdout (no trailing newline), reads a line from stdin, and returns it with the trailing newline stripped
+- throws an error if the argument is not a string or if reading stdin fails
+
+___
+
+**char_code(string, index) -> number**
+
+- returns the byte value (0-255) at the given index of the string
+- throws an error if the first argument is not a string or the second is not a number
+- throws an error if the index is negative or out of bounds
+
+___
+
+**substring(string, start, end) -> string**
+
+- returns the substring from `start` (inclusive) to `end` (exclusive)
+- throws an error if `string` is not a string or `start`/`end` are not numbers
+- throws an error if `start < 0`, `end < 0`, `start > end`, or `end` exceeds the string length
+
+___
+
+**concat(a, b) -> string**
+
+- returns the string formed by concatenating the string representations of `a` and `b`
+- accepts any combination of value types; both are stringified before joining
 
 ## Build
 
@@ -112,6 +157,7 @@ gabelang
 ```
 or run a script with
 ```sh
+gabelang [script name]
 gabelang --file [script name]
 ```
 

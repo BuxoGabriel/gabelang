@@ -1,0 +1,58 @@
+// Mini tokenizer for arithmetic expressions.
+// Splits a source string into number tokens and operator tokens,
+// using char_code for classification and substring for slicing.
+// Operators recognized: + - * /
+//
+// Expected output:
+//   NUM 12
+//   OP +
+//   NUM 345
+//   OP *
+//   NUM 6
+//   OP -
+//   NUM 7
+//   --
+//   NUM 100
+//   OP /
+//   NUM 25
+
+fn is_digit_code(c) {
+    if(c < 48) { return False; }
+    if(c > 57) { return False; }
+    return True;
+}
+
+fn read_number(src, i, n) {
+    let start = i;
+    while(i < n) {
+        if(is_digit_code(char_code(src, i))) {
+            i = i + 1;
+        } else {
+            return [substring(src, start, i), i];
+        }
+    }
+    return [substring(src, start, i), i];
+}
+
+fn print_tokens(src) {
+    let n = len(src);
+    let i = 0;
+    while(i < n) {
+        let c = char_code(src, i);
+        if(is_digit_code(c)) {
+            let pair = read_number(src, i, n);
+            let out = print(concat("NUM ", pair[0]));
+            i = pair[1];
+        } else {
+            let out = print(concat("OP ", substring(src, i, i + 1)));
+            i = i + 1;
+        }
+    }
+    return;
+}
+
+let out = print_tokens("12+345*6-7");
+out = print("--");
+out = print_tokens("100/25");
+
+return;

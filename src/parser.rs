@@ -579,10 +579,6 @@ impl<'a> Parser<'a> {
         self.expect_token(Token::RPAREN)?;
         // Contruct Group expression
         let mut expression: ast::Expression = ast::Expression::Group(Box::from(expression));
-        if self.is_eof()? {
-            return Err(self.error(ParserErrorType::UnexpectedEOF));
-        }
-        self.skip_optional_token(&Token::SEMICOLON)?;
         // If next token is arithmatic then pass in the group expression as the lhs
         if !self.is_eof()? && self.peek_token_is_arithmetic()? {
             expression = self.parse_infix(expression)?;

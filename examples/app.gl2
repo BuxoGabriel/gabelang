@@ -1,0 +1,5 @@
+let x = 10;
+let y = x + 5 * 2;
+z = -(x + y) - 1;
+let zero = 0;
+result = -+x * (y + zero);
