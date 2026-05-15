@@ -166,18 +166,16 @@ impl Gabelang {
         self.runtime.reset_stack();
     }
 
-    /// Pushes a new stack frame on to the stack
+    /// Pushes a new scope on the current environment chain
     #[cfg_attr(feature="wasm", wasm_bindgen)]
     pub fn push_frame(&mut self) {
-        self.runtime.current_context().push_scope();
+        self.runtime.enter_scope();
     }
 
-    /// Pops a stack frame off of the stack
+    /// Pops the current scope, restoring its enclosing parent. Returns false
+    /// if no enclosing scope exists (i.e. already at the global env).
     #[cfg_attr(feature="wasm", wasm_bindgen)]
     pub fn pop_frame(&mut self) -> bool {
-        match self.runtime.current_context().pop_scope() {
-            Ok(_) => true,
-            Err(_) => false
-        }
+        self.runtime.exit_scope().is_ok()
     }
 }

@@ -1,31 +1,26 @@
-use std::{collections::HashMap, error::Error, fmt::Display};
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::error::Error;
+use std::fmt::Display;
+use std::rc::Rc;
 
-use crate::ast;
+use super::Object;
 
-use super::{FunctionInner, Object, ObjectInner};
-
-/// A stack error is produced when an attempt to manipulate the stack is invalid or when trying to
-/// access a variable that is not on the stack
+/// Errors produced by environment / variable operations.
 #[derive(Debug)]
 pub enum StackError {
-    /// A Pop Empty Frame error is generated when trying to pop a stack frame from a stack with no
-    /// frames
+    /// Tried to leave a scope that has no enclosing parent (i.e. tried to pop
+    /// past the global environment).
     PopEmptyFrame,
-    /// A Variable Not In Scope error is generated when trying to manipulate or get the value of a
-    /// variable that does not exist in the stack
+    /// Tried to read or assign a variable that exists in no enclosing scope.
     VariableNotInScope,
-    /// A No Stack Error is generated when trying to get or use a variable from the stack but no
-    /// stack frames exist
-    NoStack,
 }
 
 impl Display for StackError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::PopEmptyFrame => f.write_str("Could not pop stack frame because stack is empty!"),
-            Self::VariableNotInScope => f.write_str("Could not find variable in any stack"),
-            Self::NoStack => f.write_str("Could not perform operation since there are no stack frames."),
-            
+            Self::PopEmptyFrame => f.write_str("Could not exit scope: environment has no enclosing parent."),
+            Self::VariableNotInScope => f.write_str("Could not find variable in any enclosing scope."),
         }
     }
 }
@@ -33,93 +28,66 @@ impl Display for StackError {
 impl Error for StackError {}
 
 type StackResult<T> = Result<T, StackError>;
-type StackInner = Vec<HashMap<String, Object>>;
 
-/// The Runtime Stack object
-#[derive(Debug, Clone)]
-pub struct Stack(StackInner);
+/// A lexically-scoped environment frame.
+///
+/// Each `Environment` owns its own variable bindings and optionally holds an
+/// `Rc<RefCell<Environment>>` to its enclosing scope, forming a chain that
+/// mirrors the program's lexical nesting at runtime. Lookups and assignments
+/// walk this chain. Functions capture their declaring environment by cloning
+/// the `Rc`, which gives standard lexical-closure semantics without
+/// snapshotting state at declaration time.
+#[derive(Debug)]
+pub struct Environment {
+    values: HashMap<String, Object>,
+    enclosing: Option<Rc<RefCell<Environment>>>,
+}
 
-impl  Stack {
-    fn get(&self) -> &StackInner {
-        &self.0
-    }
-
-    fn get_mut(&mut self) -> &mut StackInner  {
-        &mut self.0
-    }
-
-    /// Creates a new stack object
+impl Environment {
+    /// Creates a new root environment with no enclosing scope.
     pub fn new() -> Self {
-        Self(vec![HashMap::new()])
+        Self { values: HashMap::new(), enclosing: None }
     }
 
-    /// Pushes a new stack frame on to the stack
-    pub fn push_scope(&mut self) {
-        self.get_mut().push(HashMap::new())
+    /// Creates a new environment whose enclosing scope is `parent`.
+    pub fn new_enclosed(parent: Rc<RefCell<Environment>>) -> Self {
+        Self { values: HashMap::new(), enclosing: Some(parent) }
     }
 
-    /// Pops a stack frame and all of its variables off the stack
-    pub fn pop_scope(&mut self) -> StackResult<()> {
-        self.get_mut().pop().map(|_| ()).ok_or(StackError::PopEmptyFrame)
+    /// Returns the enclosing scope, if any.
+    pub fn enclosing(&self) -> Option<Rc<RefCell<Environment>>> {
+        self.enclosing.clone()
     }
 
-    /// Loads named parameters onto the topmost stack frame
-    pub fn load_params(&mut self, params: Vec<(String, Object)>) -> StackResult<()> {
-        for (name, val) in params.into_iter() {
-            self.create_var(name, val)?;
-        }
-        Ok(())
+    /// Binds `name` to `val` in this environment, shadowing any outer binding.
+    pub fn create_var(&mut self, name: String, val: Object) {
+        self.values.insert(name, val);
     }
 
-    /// Creates a new variable on the topmost stack frame
-    pub fn create_var(&mut self, name: String, val: Object) -> StackResult<()> {
-        let scope = self.get_mut().last_mut().ok_or(StackError::NoStack)?;
-        scope.insert(name, val);
-        Ok(())
-    }
-
-    /// Gets a variable from the the topmost stack frame that it can find it.
-    /// If the variable can not be found on any stack frame, returns [Err<StackError>]
+    /// Looks up `name`, walking the enclosing chain. Returns an `Rc`-clone of
+    /// the stored `Object` handle (not a deep copy of the value).
     pub fn get_var(&self, name: &str) -> StackResult<Object> {
-        for scope in self.get().iter().rev() {
-            if let Some(val) = scope.get(name) {
-                return Ok(val.clone());
-            }
+        if let Some(val) = self.values.get(name) {
+            return Ok(val.clone());
         }
-        Err(StackError::VariableNotInScope)
+        match &self.enclosing {
+            Some(parent) => parent.borrow().get_var(name),
+            None => Err(StackError::VariableNotInScope),
+        }
     }
 
-    /// Searches for a variable on the topmost frame that it can find it.
-    /// If the variable is found its value is set to val
-    /// If the variable is not found it returns an [Err<StackError>]
+    /// Walks the enclosing chain to find `name` and mutates the value in
+    /// place through its `RefCell`. Errors if no enclosing scope binds
+    /// `name`. (See `todo.md` item 4 for the aliasing caveat of mutating
+    /// through the existing `Rc`.)
     pub fn set_var(&mut self, name: &str, val: Object) -> StackResult<()> {
-        for scope in self.get_mut().iter_mut().rev() {
-            if let Some(obj) = scope.get_mut(name) {
-                *obj.inner() = val.inner().clone();
-                return Ok(())
-            }
+        if let Some(obj) = self.values.get_mut(name) {
+            *obj.inner() = val.inner().clone();
+            return Ok(());
         }
-        Err(StackError::VariableNotInScope)
-    }
-
-    /// Creates a new function and adds it to the topmost stack frame
-    pub fn create_func(&mut self, name: String, ast: ast::Function) -> StackResult<()> {
-        let func = FunctionInner {
-            ast,
-            context: self.flat_copy()
-        };
-        let scope = self.get_mut().last_mut().ok_or(StackError::NoStack)?;
-        scope.insert(name, ObjectInner::FUNCTION(func).as_object());
-        Ok(())
-    }
-
-    /// Creates a copy of the visible stack
-    pub fn flat_copy(&self) -> Self {
-        let mut stack = HashMap::new();
-        self.get().iter()
-            .for_each(|map| map.iter().for_each(|(k, v)| {
-                stack.insert(k.clone(), v.clone());
-            }));
-        Self(vec![stack])
+        match &self.enclosing {
+            Some(parent) => parent.borrow_mut().set_var(name, val),
+            None => Err(StackError::VariableNotInScope),
+        }
     }
 }

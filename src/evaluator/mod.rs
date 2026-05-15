@@ -7,10 +7,12 @@ use std::collections::{HashMap, HashSet};
 
 mod built_ins;
 
-/// The stack module contains the Stack class
+/// The stack module exposes the [Environment] type — the lexically-scoped
+/// variable frame used by the runtime, linked into a chain via `Rc<RefCell<…>>`
+/// enclosing pointers.
 pub mod stack;
 
-use stack::{Stack, StackError};
+use stack::{Environment, StackError};
 use built_ins::BuiltInError;
 use crate::ast::{self, join, Assignable, Expression, InfixOp, Literal, PrefixOp, Statement};
 
@@ -81,9 +83,13 @@ pub type RuntimeResult<T> = Result<T, RuntimeError>;
 
 /// An isolated runtime environment for a gabelang program
 pub struct Runtime {
-    /// The runtime's global stack is the stack at the current instruction
-    global_stack: Stack,
-    loaded_stack: Option<Stack>,
+    /// The currently-active environment. Function calls and block scopes
+    /// swap this for a fresh [Environment] whose `enclosing` chain reaches
+    /// the parent / declaring environment.
+    env: Rc<RefCell<Environment>>,
+    /// The root environment, retained so [Runtime::reset_stack] can rebuild
+    /// from a clean state.
+    globals: Rc<RefCell<Environment>>,
     built_ins: HashMap<String, Rc<dyn built_ins::BuiltIn>>,
 }
 
@@ -91,14 +97,33 @@ impl Runtime {
     /// Creates a new environment with no variables set and with built_in functions like len
     pub fn new() -> Self {
         let built_ins = built_ins::load_built_ins();
-        let global_stack = Stack::new();
-        let loaded_stack = None;
-        Self { built_ins, loaded_stack, global_stack }
+        let globals = Rc::new(RefCell::new(Environment::new()));
+        let env = globals.clone();
+        Self { built_ins, env, globals }
     }
 
-    /// Resets the stack of the runtime
+    /// Resets the runtime to a fresh global environment, discarding all
+    /// user-defined variables and functions.
     pub fn reset_stack(&mut self) {
-        self.global_stack = Stack::new();
+        let globals = Rc::new(RefCell::new(Environment::new()));
+        self.globals = globals.clone();
+        self.env = globals;
+    }
+
+    /// Pushes a new scope whose enclosing pointer is the current environment.
+    pub fn enter_scope(&mut self) {
+        let prev = self.env.clone();
+        self.env = Rc::new(RefCell::new(Environment::new_enclosed(prev)));
+    }
+
+    /// Pops the current scope, restoring its enclosing parent. Errors if the
+    /// current environment is already the root.
+    pub fn exit_scope(&mut self) -> RuntimeResult<()> {
+        let parent = self.env.borrow().enclosing();
+        match parent {
+            Some(p) => { self.env = p; Ok(()) }
+            None => Err(RuntimeError::StackError(StackError::PopEmptyFrame)),
+        }
     }
 
     /// Runs a program or statement on the global stack
@@ -118,15 +143,15 @@ impl Runtime {
     /// To run a statement without creating a new stack frame look for [Self::eval_statement]
     fn eval_program_with_new_scope(&mut self, program: &Vec<ast::Statement>) -> RuntimeResult<GabrValue> {
         let mut result = GabrValue::new(ObjectInner::NULL.as_object(), false);
-        self.current_context().push_scope();
+        self.enter_scope();
         for statement in program.iter() {
             result = self.eval_statement(statement)?;
             if result.returning {
-                self.current_context().pop_scope()?;
+                self.exit_scope()?;
                 return Ok(result)
             }
         }
-        self.current_context().pop_scope()?;
+        self.exit_scope()?;
         Ok(result)
     }
 
@@ -153,23 +178,10 @@ impl Runtime {
         self.built_ins.get(&name).map(|bi| bi.clone())
     }
 
-    fn load_params(&mut self, params: Vec<(String, Object)>) -> RuntimeResult<()> {
-        for (name, val) in params {
-            self.current_context().create_var(name, val)?;
-        }
-        Ok(())
-    }
-
     fn get_assignable(&mut self, assignable: &Assignable) -> RuntimeResult<Object> {
         match assignable {
             Assignable::Var(var) => {
-                match self.current_context().get_var(&var) {
-                    Ok(obj) => Ok(obj),
-                    Err(_) if self.loaded_stack.is_some() => {
-                        Ok(self.global_stack.get_var(&var)?)
-                    }
-                    Err(err) => Err(err.into())
-                }
+                Ok(self.env.borrow().get_var(var)?)
             },
             Assignable::PropIndex { obj, index } => {
                 let index = self.eval_expression(index)?;
@@ -216,7 +228,7 @@ impl Runtime {
     fn set_assignable(&mut self, assignable: &Assignable, val: Object) -> RuntimeResult<()> {
         match assignable {
             Assignable::Var(var) => {
-                Ok(self.current_context().set_var(&var, val)?)
+                Ok(self.env.borrow_mut().set_var(var, val)?)
             },
             Assignable::PropIndex { obj, index } => {
                 let index = self.eval_expression(index)?;
@@ -274,7 +286,7 @@ impl Runtime {
             },
             Statement::Let { ident, expression } => {
                 let val = self.eval_expression(expression)?;
-                self.current_context().create_var(ident.clone(), val)?;
+                self.env.borrow_mut().create_var(ident.clone(), val);
                 Ok(GabrValue::new(ObjectInner::NULL.as_object(), false))
             },
             Statement::Assign { assignable, expression } => {
@@ -324,7 +336,7 @@ impl Runtime {
             },
             Statement::For { init, cond, update, body } => {
                 let mut result = GabrValue::new(ObjectInner::NULL.as_object(), false);
-                self.current_context().push_scope();
+                self.enter_scope();
                 self.eval_statement(init)?;
                 while self.eval_expression(cond)?.inner().is_truthy() {
                     result = self.eval_program_with_new_scope(body)?;
@@ -333,11 +345,16 @@ impl Runtime {
                         break;
                     }
                 }
-                self.current_context().pop_scope()?;
+                self.exit_scope()?;
                 Ok(result)
             }
             Statement::FuncDecl(func) => {
-                self.current_context().create_func(func.ident.clone(), func.clone())?;
+                let captured = self.env.clone();
+                let inner = FunctionInner { ast: func.clone(), context: captured };
+                self.env.borrow_mut().create_var(
+                    func.ident.clone(),
+                    ObjectInner::FUNCTION(inner).as_object(),
+                );
                 Ok(GabrValue::new(ObjectInner::NULL.as_object(), false))
             },
         }
@@ -446,7 +463,6 @@ impl Runtime {
     }
 
     fn eval_function_call(&mut self, func_locator: &Assignable, params: &Vec<Expression>) -> RuntimeResult<Object> {
-        // look in all scopes for a function that matches function name
         let func = self.get_assignable(func_locator).ok();
         if let Some(func) = func {
             let func = {
@@ -456,25 +472,23 @@ impl Runtime {
                     _ => return Err(RuntimeError::InvalidFunctionCallTarget)
                 }
             };
-            // Create (parameter, value) list
             let params: RuntimeResult<Vec<(String, Object)>> = func.ast.params.iter()
                 .map(|param| param.clone())
                 .zip(params.iter())
                 .map(|(name, param)| Ok((name, self.eval_expression(param)?)))
                 .collect();
-            // Hold copy of previous stack for unloading
-            let loaded_stack = self.loaded_stack.clone();
-            // Load functions stack context
-            self.loaded_stack = Some(func.context.clone());
-            // Create new scope for parameters
-            self.current_context().push_scope();
-            self.load_params(params?)?;
-            let result = self.eval_program(&func.ast.body)?;
-            self.current_context().pop_scope()?;
-            // Unload function stack context
-            self.loaded_stack = loaded_stack;
-            // Function call should not automatically be interpretted as return funcCall(param);
-            Ok(result.gabr_object)
+            let params = params?;
+            // Swap the caller's env for a fresh scope whose enclosing chain
+            // reaches the function's captured (declaring) environment. The
+            // previous env is restored unconditionally below.
+            let call_env = Rc::new(RefCell::new(Environment::new_enclosed(func.context.clone())));
+            let prev_env = std::mem::replace(&mut self.env, call_env);
+            for (name, val) in params {
+                self.env.borrow_mut().create_var(name, val);
+            }
+            let result = self.eval_program(&func.ast.body);
+            self.env = prev_env;
+            Ok(result?.gabr_object)
         } else {
             let func_name = match func_locator {
                 Assignable::Var(ident) => ident,
@@ -486,14 +500,13 @@ impl Runtime {
                     .zip(params.iter())
                     .map(|(name, param)| Ok((name, self.eval_expression(param)?)))
                     .collect();
-                // Create new scope for parameters
-                self.current_context().push_scope();
-                self.load_params(params?)?;
-                // Evaluate built in function in new context
+                let params = params?;
+                self.enter_scope();
+                for (name, val) in params {
+                    self.env.borrow_mut().create_var(name, val);
+                }
                 let result = built_in.eval(self)?;
-                // Remove param variables scope
-                self.current_context().pop_scope()?;
-                // Function call should not automatically be interpretted as return funcCall(param);
+                self.exit_scope()?;
                 Ok(result)
             } else {
                 Err(StackError::VariableNotInScope.into())
@@ -501,10 +514,11 @@ impl Runtime {
         }
     }
 
-    /// Gathers the currently loaded variable/stack context, if none is explicitly loaded, it
-    /// defaults to the global_context
-    pub fn current_context(&mut self) -> &mut Stack {
-        return self.loaded_stack.as_mut().unwrap_or(&mut self.global_stack)
+    /// Returns an `Rc`-clone handle to the currently-active environment.
+    /// Kept for built-ins (`rt.current_context().borrow().get_var(...)`) and
+    /// any external code that needs to inspect bindings.
+    pub fn current_context(&self) -> Rc<RefCell<Environment>> {
+        self.env.clone()
     }
 }
 
@@ -639,7 +653,10 @@ impl Display for ObjectInner {
 #[derive(Debug, Clone)]
 struct FunctionInner {
     ast: ast::Function,
-    context: Stack
+    /// The environment captured at function declaration time. Held by `Rc`
+    /// (not by value), so the function sees live mutations to enclosing
+    /// scopes and new bindings introduced after declaration.
+    context: Rc<RefCell<Environment>>
 }
 
 impl Display for FunctionInner {

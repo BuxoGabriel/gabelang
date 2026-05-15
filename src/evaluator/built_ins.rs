@@ -50,7 +50,7 @@ impl BuiltIn for Len {
     }
 
     fn eval(&self, rt: &mut Runtime) -> BuiltInResult<Object> {
-        let obj = rt.current_context().get_var("_obj");
+        let obj = rt.current_context().borrow().get_var("_obj");
         if obj.is_err() {
             return Err(BuiltInError("Built-In \"len\" did not recieve expected arg \"_arr\"".to_owned()))
         };
@@ -79,7 +79,7 @@ impl BuiltIn for Reverse {
         ]
     }
     fn eval(&self, rt: &mut Runtime) -> BuiltInResult<Object> {
-        let obj = rt.current_context().get_var("_obj");
+        let obj = rt.current_context().borrow().get_var("_obj");
         if obj.is_err() {
             return Err(BuiltInError("Built-In \"reverse\" did not recieve expected arg \"_obj\"".to_owned()))
         }
@@ -107,7 +107,7 @@ impl BuiltIn for Abs {
     }
 
     fn eval(&self, rt: &mut Runtime) -> BuiltInResult<Object> {
-        let _num = rt.current_context().get_var("_num");
+        let _num = rt.current_context().borrow().get_var("_num");
         if _num.is_err() {
             return Err(BuiltInError("Built-In \"abs\" did not recieve arg abs".to_owned()));
         }
@@ -134,7 +134,7 @@ impl BuiltIn for Open {
     }
 
     fn eval(&self, rt: &mut Runtime) -> BuiltInResult<Object> {
-        let _path = rt.current_context().get_var("_path");
+        let _path = rt.current_context().borrow().get_var("_path");
         if _path.is_err() {
             return Err(BuiltInError("Built-In \"open\" did not recieve arg _path".to_owned()));
         }
@@ -164,7 +164,7 @@ impl BuiltIn for Print {
     }
 
     fn eval(&self, rt: &mut Runtime) -> BuiltInResult<Object> {
-        let _content = rt.current_context().get_var("_content");
+        let _content = rt.current_context().borrow().get_var("_content");
         if _content.is_err() {
             return Err(BuiltInError("Built-In \"print\" did not recieve arg _content".to_owned()));
         }
@@ -190,9 +190,9 @@ impl BuiltIn for CharCode {
     }
 
     fn eval(&self, rt: &mut Runtime) -> BuiltInResult<Object> {
-        let s = rt.current_context().get_var("_s")
+        let s = rt.current_context().borrow().get_var("_s")
             .map_err(|_| BuiltInError("Built-In \"char_code\" did not recieve arg _s".to_owned()))?;
-        let i = rt.current_context().get_var("_i")
+        let i = rt.current_context().borrow().get_var("_i")
             .map_err(|_| BuiltInError("Built-In \"char_code\" did not recieve arg _i".to_owned()))?;
         let s = s.inner();
         let i = i.inner();
@@ -228,11 +228,11 @@ impl BuiltIn for Substring {
     }
 
     fn eval(&self, rt: &mut Runtime) -> BuiltInResult<Object> {
-        let s = rt.current_context().get_var("_s")
+        let s = rt.current_context().borrow().get_var("_s")
             .map_err(|_| BuiltInError("Built-In \"substring\" did not recieve arg _s".to_owned()))?;
-        let start = rt.current_context().get_var("_start")
+        let start = rt.current_context().borrow().get_var("_start")
             .map_err(|_| BuiltInError("Built-In \"substring\" did not recieve arg _start".to_owned()))?;
-        let end = rt.current_context().get_var("_end")
+        let end = rt.current_context().borrow().get_var("_end")
             .map_err(|_| BuiltInError("Built-In \"substring\" did not recieve arg _end".to_owned()))?;
         let s = s.inner();
         let start = start.inner();
@@ -271,7 +271,7 @@ impl BuiltIn for Prompt {
     }
 
     fn eval(&self, rt: &mut Runtime) -> BuiltInResult<Object> {
-        let msg = rt.current_context().get_var("_msg")
+        let msg = rt.current_context().borrow().get_var("_msg")
             .map_err(|_| BuiltInError("Built-In \"prompt\" did not recieve arg _msg".to_owned()))?;
         let msg = msg.inner();
         let msg = match &*msg {
@@ -303,9 +303,9 @@ impl BuiltIn for Concat {
     }
 
     fn eval(&self, rt: &mut Runtime) -> BuiltInResult<Object> {
-        let a = rt.current_context().get_var("_a")
+        let a = rt.current_context().borrow().get_var("_a")
             .map_err(|_| BuiltInError("Built-In \"concat\" did not recieve arg _a".to_owned()))?;
-        let b = rt.current_context().get_var("_b")
+        let b = rt.current_context().borrow().get_var("_b")
             .map_err(|_| BuiltInError("Built-In \"concat\" did not recieve arg _b".to_owned()))?;
         let combined = format!("{}{}", &*a.inner(), &*b.inner());
         Ok(ObjectInner::STRING(combined).as_object())
