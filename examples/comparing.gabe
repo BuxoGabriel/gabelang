@@ -1,0 +1,10 @@
+let x = { a: "foo", b: "bar" };
+let MY_CONST = "foo";
+
+if(x.a == MY_CONST) {
+    print("its a match");
+}
+
+if(x.a != MY_CONST) {
+    print("its not a match");
+}

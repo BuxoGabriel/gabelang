@@ -101,9 +101,8 @@ pub fn run(config: Config) -> io::Result<()> {
             Ok(program) => {
                 println!("parsing complete! Running {}", &file_name);
                 let mut runtime = Runtime::new();
-                match runtime.run_program(&program) {
-                    Ok(res) => println!("{res}"),
-                    Err(err) => println!("Execution Failed: {err}")
+                if let Err(err) = runtime.run_program(&program) {
+                    println!("Execution Failed: {err}")
                 }
             },
             Err(e) => println!("{e}"),
