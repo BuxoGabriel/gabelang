@@ -543,7 +543,7 @@ impl Display for GabrValue {
 pub struct Object(Rc<RefCell<ObjectInner>>);
 
 impl Object {
-    fn inner(&self) -> RefMut<ObjectInner> {
+    fn inner(&self) -> RefMut<'_, ObjectInner> {
         self.0.borrow_mut()
     }
 }
