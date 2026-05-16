@@ -1,5 +1,6 @@
 # Gabelang
-
+![Testing CI Badge](https://github.com/buxogabriel/gabelang/actions/workflows/rust.yml/badge.svg)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/BuxoGabriel/gabelang)
 ## Overview
 
 This is a language I am writing in rust for fun and to learn more about lexers, parsers, interpreters, and to dymistify programming languages in general.
